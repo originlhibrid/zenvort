@@ -2,13 +2,15 @@ import "dotenv/config";
 import express, { Request, Response, NextFunction } from "express";
 import multer from "multer";
 import path from "path";
+import crypto from "crypto";
 import { db } from "@zenvort/db";
-import { conversionsQueue } from "@zenvort/queue";
+import { conversionsQueue, redisConnection } from "@zenvort/queue";
 import { uploadFile } from "@zenvort/storage";
-import { z } from "zod";
 
 const app = express();
-const upload = multer({ dest: "/tmp/uploads" });
+const upload = multer({ storage: multer.memoryStorage() });
+
+app.use(express.json());
 
 // Auth middleware
 const authMiddleware = async (req: Request, res: Response, next: NextFunction) => {
@@ -35,8 +37,37 @@ const errorHandler = (err: Error, _req: Request, res: Response, _next: NextFunct
 };
 
 // Routes
-app.get("/health", (_req, res) => {
-  res.json({ ok: true });
+app.get("/health", async (_req, res) => {
+  try {
+    // Check database connection
+    await db.$connect();
+
+    // Check Redis connection
+    await new Promise((resolve, reject) => {
+      redisConnection.ping((err, result) => {
+        if (err) reject(err);
+        else resolve(result);
+      });
+    });
+
+    res.json({
+      ok: true,
+      timestamp: new Date().toISOString(),
+      services: {
+        redis: "connected",
+        db: "connected",
+      },
+    });
+  } catch (err) {
+    res.status(503).json({
+      ok: false,
+      timestamp: new Date().toISOString(),
+      services: {
+        redis: "disconnected",
+        db: "disconnected",
+      },
+    });
+  }
 });
 
 app.post("/jobs", authMiddleware, upload.single("file"), async (req: Request, res: Response, next: NextFunction) => {
@@ -47,10 +78,11 @@ app.post("/jobs", authMiddleware, upload.single("file"), async (req: Request, re
       return;
     }
 
-    const bodySchema = z.object({
-      outputFormat: z.string().min(1),
-    });
-    const { outputFormat } = bodySchema.parse(req.body);
+    const { outputFormat } = req.body;
+    if (!outputFormat) {
+      res.status(400).json({ error: "outputFormat is required" });
+      return;
+    }
 
     const inputFormat = path.extname(file.originalname).slice(1).toLowerCase();
     if (!inputFormat) {
@@ -58,31 +90,50 @@ app.post("/jobs", authMiddleware, upload.single("file"), async (req: Request, re
       return;
     }
 
+    const jobId = crypto.randomUUID();
+
+    // Write buffer to temp file for upload since uploadFile expects a file path
+    const tmpPath = `/tmp/${jobId}-${file.originalname}`;
+    const { writeFileSync } = await import("fs");
+    writeFileSync(tmpPath, file.buffer);
+
+    // Upload file to R2
+    const key = `inputs/${jobId}/${file.originalname}`;
+    await uploadFile(key, tmpPath, file.mimetype);
+
+    // Clean up temp file
+    const { unlinkSync } = await import("fs");
+    unlinkSync(tmpPath);
+
+    // Get R2 URL for the uploaded file
+    const r2Url = `${process.env.R2_PUBLIC_URL}/${key}`;
+
     // Create job in database
     const job = await db.job.create({
       data: {
+        id: jobId,
         userId: (req as any).user.id,
         status: "PENDING",
-        inputUrl: "",
+        inputUrl: r2Url,
         inputFormat,
         outputFormat,
       },
     });
 
-    // Upload file to R2
-    const key = `inputs/${job.id}/${file.originalname}`;
-    await uploadFile(key, file.path, file.mimetype);
-
     // Queue conversion job
     await conversionsQueue.add("convert", {
       jobId: job.id,
-      inputUrl: `${process.env.R2_PUBLIC_URL}/${key}`,
+      inputUrl: r2Url,
       inputFormat,
       outputFormat,
       userId: (req as any).user.id,
     });
 
-    res.status(201).json({ jobId: job.id, status: "PENDING" });
+    res.status(201).json({
+      jobId: job.id,
+      status: "PENDING",
+      message: "Job queued successfully",
+    });
   } catch (err) {
     next(err);
   }
@@ -107,10 +158,41 @@ app.get("/jobs/:id", authMiddleware, async (req: Request, res: Response, next: N
       status: job.status,
       inputFormat: job.inputFormat,
       outputFormat: job.outputFormat,
+      inputUrl: job.inputUrl,
       outputUrl: job.outputUrl,
       error: job.error,
       createdAt: job.createdAt,
+      updatedAt: job.updatedAt,
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+app.post("/jobs/:id/webhook", async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { status, outputUrl, error } = req.body;
+    if (!status) {
+      res.status(400).json({ error: "status is required" });
+      return;
+    }
+
+    const job = await db.job.findUnique({ where: { id: req.params.id } });
+    if (!job) {
+      res.status(404).json({ error: "Job not found" });
+      return;
+    }
+
+    await db.job.update({
+      where: { id: req.params.id },
+      data: {
+        status,
+        ...(outputUrl !== undefined && { outputUrl }),
+        ...(error !== undefined && { error }),
+      },
+    });
+
+    res.json({ ok: true });
   } catch (err) {
     next(err);
   }

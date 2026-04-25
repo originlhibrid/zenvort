@@ -1,82 +1,88 @@
 import "dotenv/config";
 import { Worker, Job as BullJob } from "bullmq";
 import ffmpeg from "fluent-ffmpeg";
-import ffmpegInstaller from "@ffmpeg-installer/ffmpeg";
 import { exec } from "child_process";
 import { promisify } from "util";
-import { pipeline } from "stream/promises";
-import { createWriteStream, createReadStream, rmSync } from "fs";
 import path from "path";
-import tmp from "tmp";
 import { db } from "@zenvort/db";
 import { redisConnection, ConversionJobData } from "@zenvort/queue";
 import { downloadFile, uploadFile } from "@zenvort/storage";
 
 const execAsync = promisify(exec);
 
-// Set ffmpeg path
-ffmpeg.setFfmpegPath(ffmpegInstaller.path);
+const VIDEO_AUDIO_FORMATS = ["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "aac", "flac"];
+const DOCUMENT_FORMATS = ["pdf", "docx", "doc", "pptx", "xlsx", "odt", "html"];
 
-const VIDEO_AUDIO_FORMATS = ["mp4", "mp3", "mov", "avi", "wav", "webm", "mkv", "flac", "aac"];
-const DOCUMENT_FORMATS = ["docx", "pdf", "pptx", "xlsx", "odt"];
+async function convertWithFFmpeg(inputPath: string, outputPath: string, outputFormat: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    ffmpeg(inputPath)
+      .toFormat(outputFormat)
+      .save(outputPath)
+      .on("end", () => resolve())
+      .on("error", (err) => reject(err));
+  });
+}
+
+async function convertWithLibreOffice(inputPath: string, outputFormat: string): Promise<string> {
+  const cmd = `libreoffice --headless --convert-to ${outputFormat} --outdir /tmp "${inputPath}"`;
+  await execAsync(cmd);
+  
+  // LibreOffice renames the output file, find it
+  const baseName = path.basename(inputPath, path.extname(inputPath));
+  return `/tmp/${baseName}.${outputFormat}`;
+}
 
 async function processJob(job: BullJob<ConversionJobData>): Promise<void> {
   const { jobId, inputUrl, inputFormat, outputFormat } = job.data;
-  const tempDir = tmp.dirSync({ prefix: "zenvort-" });
-  let inputFilePath = "";
-  let outputFilePath = "";
+  let inputPath = "";
+  let outputPath = "";
+  let convertedPath = "";
 
   try {
-    // Update status to PROCESSING
+    // 1. Update job status to PROCESSING
     await db.job.update({
       where: { id: jobId },
       data: { status: "PROCESSING" },
     });
 
-    // Download input file
-    inputFilePath = path.join(tempDir.name, `input.${inputFormat}`);
-    await downloadFile(inputUrl.replace(process.env.R2_PUBLIC_URL! + "/", ""), inputFilePath);
+    // 2. Download input file from R2
+    const inputKey = inputUrl.replace(`${process.env.R2_PUBLIC_URL}/`, "");
+    inputPath = `/tmp/${jobId}-input.${inputFormat}`;
+    await downloadFile(inputKey, inputPath);
 
-    outputFilePath = path.join(tempDir.name, `output.${outputFormat}`);
+    outputPath = `/tmp/${jobId}-output.${outputFormat}`;
 
-    // Process based on format type
+    // 3. Determine converter based on inputFormat
     if (VIDEO_AUDIO_FORMATS.includes(inputFormat) || VIDEO_AUDIO_FORMATS.includes(outputFormat)) {
-      // Use ffmpeg for video/audio
-      await new Promise<void>((resolve, reject) => {
-        ffmpeg(inputFilePath)
-          .toFormat(outputFormat)
-          .save(outputFilePath)
-          .on("end", () => resolve())
-          .on("error", (err) => reject(err));
-      });
+      // 4. FFmpeg conversion
+      await convertWithFFmpeg(inputPath, outputPath, outputFormat);
     } else if (DOCUMENT_FORMATS.includes(inputFormat)) {
-      // Use libreoffice for documents
-      const cmd = `libreoffice --headless --convert-to ${outputFormat} --outdir "${tempDir.name}" "${inputFilePath}"`;
-      await execAsync(cmd);
-      // LibreOffice renames the file
-      const baseName = path.basename(inputFilePath, path.extname(inputFilePath));
-      const convertedPath = path.join(tempDir.name, `${baseName}.${outputFormat}`);
-      if (convertedPath !== outputFilePath) {
-        await pipeline(createReadStream(convertedPath), createWriteStream(outputFilePath));
+      // 5. LibreOffice conversion
+      convertedPath = await convertWithLibreOffice(inputPath, outputFormat);
+      // If LibreOffice output path differs from expected, move it
+      if (convertedPath !== outputPath) {
+        const { createReadStream, createWriteStream } = await import("fs");
+        const { pipeline } = await import("stream/promises");
+        await pipeline(createReadStream(convertedPath), createWriteStream(outputPath));
       }
     } else {
       throw new Error(`Unsupported format conversion: ${inputFormat} -> ${outputFormat}`);
     }
 
-    // Upload output to R2
+    // 6. Upload output to R2
     const outputKey = `outputs/${jobId}/output.${outputFormat}`;
-    const publicUrl = await uploadFile(outputKey, outputFilePath, "application/octet-stream");
+    const r2Url = await uploadFile(outputKey, outputPath, "application/octet-stream");
 
-    // Update job to DONE
+    // 7. Update job status to DONE
     await db.job.update({
       where: { id: jobId },
       data: {
         status: "DONE",
-        outputUrl: publicUrl,
+        outputUrl: r2Url,
       },
     });
   } catch (error) {
-    // Update job to FAILED
+    // 9. On error: update status to FAILED
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     await db.job.update({
       where: { id: jobId },
@@ -87,9 +93,14 @@ async function processJob(job: BullJob<ConversionJobData>): Promise<void> {
     });
     throw error;
   } finally {
-    // Cleanup temp files
+    // 8. Delete temp files
     try {
-      rmSync(tempDir.name, { recursive: true, force: true });
+      const { unlinkSync, existsSync } = await import("fs");
+      if (inputPath && existsSync(inputPath)) unlinkSync(inputPath);
+      if (outputPath && existsSync(outputPath)) unlinkSync(outputPath);
+      if (convertedPath && convertedPath !== outputPath && existsSync(convertedPath)) {
+        unlinkSync(convertedPath);
+      }
     } catch {
       // Ignore cleanup errors
     }

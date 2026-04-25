@@ -40,5 +40,27 @@ services:
       - .env
     command: node apps/worker/dist/index.js
 
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: sh -c "npx prisma migrate deploy --schema=./packages/db/prisma/schema.prisma"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+    restart: "no"
+
+  seed:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: node packages/db/seed.cjs
+    env_file:
+      - .env
+    depends_on:
+      - migrate
+    restart: "no"
+
 volumes:
   postgres_data:

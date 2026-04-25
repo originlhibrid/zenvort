@@ -4,17 +4,23 @@ const prisma = new PrismaClient();
 
 async function main() {
   await prisma.user.upsert({
-    where: { email: "test@zenvort.dev" },
-    update: {},
+    where: { email: "test@zenvort.com" },
     create: {
-      email: "test@zenvort.dev",
+      email: "test@zenvort.com",
       apiKey: "test-key-123",
       credits: 100,
     },
+    update: {},
   });
-  console.log("Test user created");
+
+  console.log("Seeded test user with apiKey: test-key-123");
 }
 
 main()
-  .catch(console.error)
-  .finally(() => prisma.$disconnect());
+  .catch((e) => {
+    console.error(e);
+    process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });
