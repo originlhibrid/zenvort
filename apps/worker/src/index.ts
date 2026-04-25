@@ -11,7 +11,7 @@ import { downloadFile, uploadFile } from "@zenvort/storage";
 const execAsync = promisify(exec);
 
 const VIDEO_AUDIO_FORMATS = ["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "aac", "flac"];
-const DOCUMENT_FORMATS = ["pdf", "docx", "doc", "pptx", "xlsx", "odt", "html"];
+const libreOfficeFormats = ['pdf', 'docx', 'doc', 'pptx', 'xlsx', 'odt', 'html', 'txt'];
 
 async function convertWithFFmpeg(inputPath: string, outputPath: string, outputFormat: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -56,7 +56,7 @@ async function processJob(job: BullJob<ConversionJobData>): Promise<void> {
     if (VIDEO_AUDIO_FORMATS.includes(inputFormat) || VIDEO_AUDIO_FORMATS.includes(outputFormat)) {
       // 4. FFmpeg conversion
       await convertWithFFmpeg(inputPath, outputPath, outputFormat);
-    } else if (DOCUMENT_FORMATS.includes(inputFormat)) {
+    } else if (libreOfficeFormats.includes(inputFormat)) {
       // 5. LibreOffice conversion
       convertedPath = await convertWithLibreOffice(inputPath, outputFormat);
       // If LibreOffice output path differs from expected, move it
