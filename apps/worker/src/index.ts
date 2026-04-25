@@ -7,11 +7,45 @@ import path from "path";
 import { db } from "@zenvort/db";
 import { redisConnection, ConversionJobData } from "@zenvort/queue";
 import { downloadFile, uploadFile } from "@zenvort/storage";
+import { startCleanupCron } from "./cron/cleanup.js";
 
 const execAsync = promisify(exec);
 
 const VIDEO_AUDIO_FORMATS = ["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "aac", "flac"];
 const libreOfficeFormats = ['pdf', 'docx', 'doc', 'pptx', 'xlsx', 'odt', 'html', 'txt'];
+
+async function sendWebhook(
+  userId: string,
+  jobId: string,
+  status: 'DONE' | 'FAILED',
+  outputUrl: string | undefined,
+  error: string | undefined
+): Promise<void> {
+  try {
+    const user = await db.user.findUnique({ where: { id: userId } });
+    if (!user?.webhookUrl) return;
+
+    const response = await fetch(user.webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jobId,
+        status,
+        outputUrl,
+        error,
+        timestamp: new Date().toISOString(),
+      }),
+    });
+
+    if (response.ok) {
+      console.log(`Webhook delivered for job ${jobId} to ${user.webhookUrl}`);
+    } else {
+      console.error(`Webhook failed for job ${jobId}: ${response.status}`);
+    }
+  } catch (err) {
+    console.error(`Webhook error for job ${jobId}:`, err);
+  }
+}
 
 async function convertWithFFmpeg(inputPath: string, outputPath: string, outputFormat: string): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -81,16 +115,35 @@ async function processJob(job: BullJob<ConversionJobData>): Promise<void> {
         outputUrl: r2Url,
       },
     });
+
+    // Deduct credit and log
+    const { userId } = job.data;
+    if (userId) {
+      await db.user.update({
+        where: { id: userId },
+        data: { credits: { decrement: 1 } }
+      });
+      await db.creditLog.create({
+        data: { userId, amount: -1, reason: 'conversion', jobId: jobId }
+      });
+      await sendWebhook(userId, jobId, 'DONE', r2Url, undefined);
+    }
   } catch (error) {
-    // 9. On error: update status to FAILED
+    // 9. On error: only mark as FAILED after all retries exhausted
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    await db.job.update({
-      where: { id: jobId },
-      data: {
-        status: "FAILED",
-        error: errorMessage,
-      },
-    });
+    const maxAttempts = job.opts.attempts || 3;
+    if (job.attemptsMade >= maxAttempts - 1) {
+      await db.job.update({
+        where: { id: jobId },
+        data: {
+          status: "FAILED",
+          error: errorMessage,
+        },
+      });
+      if (job.data.userId) {
+      await sendWebhook(job.data.userId, jobId, 'FAILED', undefined, errorMessage);
+    }
+    }
     throw error;
   } finally {
     // 8. Delete temp files
@@ -112,16 +165,20 @@ const worker = new Worker<ConversionJobData>(
   processJob,
   {
     connection: redisConnection,
-    concurrency: 3,
+    concurrency: parseInt(process.env.WORKER_CONCURRENCY || '3'),
   }
 );
 
 worker.on("completed", (job) => {
-  console.log(`Job ${job.id} completed`);
+  console.log(`Job ${job.id} completed successfully`);
 });
 
-worker.on("failed", (job, err) => {
-  console.error(`Job ${job?.id} failed:`, err.message);
+worker.on("failed", async (job, err) => {
+  console.error(`Job ${job?.id} failed with error: ${err.message}`);
+  if (job && job.attemptsMade >= 3) {
+    console.log(`Job ${job.id} exhausted all retries, marking as FAILED`);
+  }
 });
 
 console.log("Worker started, listening for jobs...");
+startCleanupCron();

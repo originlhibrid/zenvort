@@ -7,6 +7,7 @@ import { uploadFile } from '@zenvort/storage'
 import path from 'path'
 import fs from 'fs/promises'
 import os from 'os'
+import { jobSubmitLimiter } from '../middleware/rateLimiter.js'
 
 declare global {
   namespace Express {
@@ -33,13 +34,18 @@ async function requireApiKey(req: Request, res: Response, next: NextFunction) {
 }
 
 // POST /jobs
-router.post('/', requireApiKey, upload.single('file'), async (req: Request, res: Response) => {
+router.post('/', jobSubmitLimiter, requireApiKey, upload.single('file'), async (req: Request, res: Response) => {
   try {
     const { outputFormat } = req.body
     const file = req.file
 
     if (!file) return res.status(400).json({ error: 'No file uploaded' })
     if (!outputFormat) return res.status(400).json({ error: 'outputFormat is required' })
+
+    // Check credits
+    if (req.user.credits <= 0) {
+      return res.status(402).json({ error: 'Insufficient credits' })
+    }
 
     const jobId = crypto.randomUUID()
     const ext = path.extname(file.originalname).replace('.', '').toLowerCase()
@@ -91,7 +97,7 @@ router.get('/:id', requireApiKey, async (req: Request, res: Response) => {
   try {
     const job = await db.job.findUnique({ where: { id: req.params.id } })
     if (!job) return res.status(404).json({ error: 'Job not found' })
-    return res.json(job)
+    return res.json({ ...job, credits: req.user.credits })
   } catch (err) {
     console.error(err)
     return res.status(500).json({ error: 'Internal server error' })

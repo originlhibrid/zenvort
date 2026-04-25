@@ -13,4 +13,13 @@ export type ConversionJobData = {
 
 export const conversionsQueue = new Queue<ConversionJobData>("conversions", {
   connection: redisConnection,
+  defaultJobOptions: {
+    attempts: 3,
+    backoff: {
+      type: "exponential",
+      delay: 5000,
+    },
+    removeOnComplete: 100,
+    removeOnFail: 200,
+  },
 });

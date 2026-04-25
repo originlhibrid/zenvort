@@ -12,14 +12,26 @@ model User {
   email     String   @unique
   apiKey    String   @unique
   credits   Int      @default(100)
+  webhookUrl String?
   createdAt DateTime @default(now())
   jobs      Job[]
+  creditLogs CreditLog[]
+}
+
+model CreditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Int
+  reason    String
+  jobId     String?
+  createdAt DateTime @default(now())
 }
 
 model Job {
   id          String    @id @default(cuid())
   userId      String?
-  status      JobStatus @default(PENDING)
+  status      String     @default("PENDING")
   inputUrl    String
   outputUrl   String?
   inputFormat String
@@ -30,9 +42,3 @@ model Job {
   user        User?     @relation(fields: [userId], references: [id])
 }
 
-enum JobStatus {
-  PENDING
-  PROCESSING
-  DONE
-  FAILED
-}
