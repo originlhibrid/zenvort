@@ -3,6 +3,33 @@ import { db } from '@zenvort/db';
 
 const router = express.Router();
 
+// GET /user/me
+router.get('/me', async (req: Request, res: Response) => {
+  try {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Missing API key' });
+    }
+    const apiKey = authHeader.split(' ')[1];
+    const user = await db.user.findUnique({ 
+      where: { apiKey },
+      select: {
+        id: true,
+        email: true,
+        credits: true,
+        webhookUrl: true,
+        role: true,
+        createdAt: true,
+      }
+    });
+    if (!user) return res.status(401).json({ error: 'Invalid API key' });
+    return res.json(user);
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // PATCH /user/webhook
 router.patch('/webhook', async (req: Request, res: Response) => {
   try {

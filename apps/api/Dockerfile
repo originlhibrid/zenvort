@@ -1,6 +1,7 @@
 FROM node:20-alpine
 
-RUN apk add --no-cache openssl openssl-dev
+# Install build tools for native modules like bcrypt
+RUN apk add --no-cache openssl openssl-dev python3 make g++
 
 WORKDIR /app
 

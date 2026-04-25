@@ -33,6 +33,38 @@ async function requireApiKey(req: Request, res: Response, next: NextFunction) {
   next()
 }
 
+// GET /jobs - List user's jobs with pagination
+router.get('/', requireApiKey, async (req: Request, res: Response) => {
+  try {
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const skip = (page - 1) * limit;
+
+    // Count total jobs for this user
+    const total = await db.job.count({
+      where: { userId: req.user.id }
+    });
+
+    // Get paginated jobs, newest first
+    const jobs = await db.job.findMany({
+      where: { userId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+    });
+
+    return res.json({
+      jobs,
+      total,
+      page,
+      limit,
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // POST /jobs
 router.post('/', jobSubmitLimiter, requireApiKey, upload.single('file'), async (req: Request, res: Response) => {
   try {
