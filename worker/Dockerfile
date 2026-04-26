@@ -18,4 +18,4 @@ ENV PYTHONPATH=/app
 
 RUN mkdir -p /tmp/zenvort
 
-CMD ["celery", "-A", "worker.celery_app", "worker", "--loglevel=info", "--concurrency=${WORKER_CONCURRENCY:-3}"]
+CMD celery -A worker.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY:-3}
