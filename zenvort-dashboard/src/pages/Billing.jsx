@@ -1,70 +1,60 @@
-import React, { useState, useEffect } from 'react';
-import { api } from '../api';
-import { Store } from '../store';
-import { useNavigate } from 'react-router-dom';
+import AppLayout from '@/components/layout/AppLayout'
+import { useAuth } from '@/lib/store'
 
-const formatDate = (d) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+const plans = [
+  { name: 'Starter', price: '₹199', credits: '500', current: false },
+  { name: 'Pro', price: '₹599', credits: '2,000', current: true },
+  { name: 'Enterprise', price: '₹1,999', credits: '10,000', current: false },
+]
 
-export function Billing() {
-  const navigate = useNavigate();
-  const [credits, setCredits] = useState(null);
-  const [transactions, setTransactions] = useState([]);
-  const [loadingTx, setLoadingTx] = useState(true);
-
-  useEffect(() => {
-    if (!Store.isAuthenticated()) { navigate('/login'); return; }
-    api.getUsage().then(d => setCredits(d.credits)).catch(console.error);
-    api.getTransactions().then(d => { setTransactions(d.logs || []); setLoadingTx(false); }).catch(() => setLoadingTx(false));
-  }, []);
+export default function Billing() {
+  const { state } = useAuth()
 
   return (
-    <div className="p-6 md:p-8 max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold text-slate-900 mb-1">Billing</h1>
-      <p className="text-slate-500 mb-8">Manage your credits and view transaction history.</p>
-
-      <div className="bg-white rounded-xl border border-slate-200 p-8 mb-8">
-        <p className="text-sm font-medium text-slate-500 mb-2">Credit Balance</p>
-        <p className="text-5xl font-bold text-slate-900">{credits ?? '...'}</p>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-slate-200">
-          <h2 className="text-lg font-semibold text-slate-900">Transaction History</h2>
+    <AppLayout>
+      <div className="space-y-4 max-w-[600px]">
+        {/* Current plan */}
+        <div className="bg-white border border-border rounded-md p-5">
+          <h3 className="text-[13px] font-medium text-text-primary mb-3">Current Plan</h3>
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-[15px] font-medium text-primary">Pro</div>
+              <div className="text-[11px] text-text-tertiary">₹599/mo · 2,000 credits</div>
+            </div>
+            <div className="text-[11px] bg-accent/20 text-accent px-2.5 py-0.5 rounded-full font-medium">
+              Active
+            </div>
+          </div>
         </div>
-        {loadingTx ? (
-          <div className="p-12 flex items-center justify-center">
-            <div className="w-8 h-8 border-4 border-slate-200 border-t-indigo-600 rounded-full animate-spin"></div>
+
+        {/* Credits balance */}
+        <div className="bg-white border border-border rounded-md p-5">
+          <h3 className="text-[13px] font-medium text-text-primary mb-3">Credits Balance</h3>
+          <div className="text-[24px] font-medium text-secondary">{state.credits}</div>
+          <p className="text-[11px] text-text-tertiary mt-1">credits remaining</p>
+        </div>
+
+        {/* Available plans */}
+        <div className="bg-white border border-border rounded-md p-5">
+          <h3 className="text-[13px] font-medium text-text-primary mb-3">Available Plans</h3>
+          <div className="flex gap-3">
+            {plans.map(plan => (
+              <div key={plan.name} className="flex-1 border border-border rounded-[10px] p-4">
+                <div className="text-[13px] font-medium text-text-primary">{plan.name}</div>
+                <div className="text-[18px] font-medium text-text-primary mt-1">{plan.price}</div>
+                <div className="text-[11px] text-text-tertiary mt-0.5">{plan.credits} credits</div>
+                {plan.current ? (
+                  <div className="mt-3 text-[11px] text-primary font-medium">Current plan</div>
+                ) : (
+                  <div className="mt-3 text-[11px] border border-border text-text-secondary rounded-[6px] py-1.5 text-center cursor-pointer hover:bg-slate-50 transition-colors">
+                    Upgrade
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
-        ) : transactions.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="text-4xl mb-4">📋</div>
-            <p className="text-slate-500">No transactions yet.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[500px]">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Date</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Reason</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Amount</th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Job ID</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {transactions.map(tx => (
-                  <tr key={tx.id} className="hover:bg-slate-50">
-                    <td className="px-6 py-4 text-sm text-slate-600">{formatDate(tx.createdAt)}</td>
-                    <td className="px-6 py-4 text-sm text-slate-600 capitalize">{tx.reason}</td>
-                    <td className="px-6 py-4 text-sm font-semibold text-slate-900">{tx.amount > 0 ? '+' : ''}{tx.amount}</td>
-                    <td className="px-6 py-4 text-sm font-mono text-slate-400">{tx.jobId ? tx.jobId.slice(0, 8) + '...' : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        </div>
       </div>
-    </div>
-  );
+    </AppLayout>
+  )
 }

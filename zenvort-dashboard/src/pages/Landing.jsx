@@ -1,177 +1,222 @@
-import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { api } from '../api';
-
-const features = [
-  { icon: '🎬', title: 'Video & Audio', subtitle: 'FFmpeg', desc: 'Convert mp4, mov, avi, mp3, wav, aac and more' },
-  { icon: '📄', title: 'Documents', subtitle: 'LibreOffice', desc: 'Convert pdf, docx, pptx, xlsx, odt and more' },
-  { icon: '⚡', title: 'Async Queue', subtitle: 'BullMQ', desc: 'Jobs processed reliably with automatic retries' },
-  { icon: '☁️', title: 'Cloud Storage', subtitle: 'R2', desc: 'Files stored securely on Cloudflare R2' },
-  { icon: '🔔', title: 'Webhooks', subtitle: '', desc: 'Get notified instantly when your conversion completes' },
-  { icon: '💰', title: 'Credit Based', subtitle: '', desc: 'Pay only for what you use, starting at 1 credit per job' },
-];
+import { useNavigate } from 'react-router-dom'
+import { useTheme } from '@/lib/store'
+import { Sun, Moon } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 const plans = [
-  { name: 'Starter', credits: 500, price: 'Rs.199', features: ['500 credits', 'All formats', 'Webhooks', 'API access'] },
-  { name: 'Pro', credits: 2000, price: 'Rs.599', featured: true, features: ['2000 credits', 'All formats', 'Webhooks', 'API access', 'Priority support'] },
-  { name: 'Enterprise', credits: 10000, price: 'Rs.1999', features: ['10000 credits', 'All formats', 'Webhooks', 'API access', 'Dedicated support'] },
-];
+  {
+    name: 'Starter',
+    price: '₹199',
+    credits: '500',
+    features: ['500 conversions', 'All 38 formats', 'Webhook support', 'REST API access'],
+    cta: 'Get started',
+    highlight: false,
+  },
+  {
+    name: 'Pro',
+    price: '₹599',
+    credits: '2,000',
+    features: ['2000 conversions', 'All 38 formats', 'Webhook support', 'REST API access'],
+    cta: 'Get started',
+    highlight: true,
+  },
+  {
+    name: 'Enterprise',
+    price: '₹1,999',
+    credits: '10,000',
+    features: ['10000 conversions', 'All 38 formats', 'Webhook support', 'REST API access'],
+    cta: 'Get started',
+    highlight: false,
+  },
+]
 
-export function Landing() {
-  const [plansData, setPlansData] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.getPlans().then(d => { setPlansData(d); setLoading(false); }).catch(() => setLoading(false));
-  }, []);
+export default function Landing() {
+  const { dark, toggleDark } = useTheme()
+  const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-50 bg-white border-b border-slate-200">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex justify-between items-center">
-          <span className="font-bold text-xl text-slate-900">Zenvort</span>
+    <div className="min-h-screen bg-white dark:bg-slate-950">
+
+      {/* ── Navbar ── */}
+      <div className="sticky top-0 z-50 bg-white/90 dark:bg-slate-950/90 border-b border-slate-200 dark:border-slate-700">
+        <div className="flex items-center justify-between px-6 py-3.5">
+          {/* Logo */}
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => navigate('/')}>
+            <div className="w-[22px] h-[22px] bg-indigo-500 rounded-[6px] flex-shrink-0" style={{ width: 22, height: 22 }} />
+            <span className="text-[15px] font-medium text-slate-900 dark:text-white">Zenvort</span>
+          </div>
+
+          {/* Right side */}
           <div className="flex items-center gap-3">
-            <Link to="/login" className="px-4 py-2 text-slate-600 hover:text-slate-900 font-medium">Login</Link>
-            <Link to="/signup" className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-medium transition-colors">Get Started</Link>
-          </div>
-        </div>
-      </nav>
+            <span
+              className="text-[13px] text-slate-700 dark:text-slate-200 cursor-pointer hover:text-slate-900 dark:hover:text-white transition-colors"
+              onClick={() => navigate('/login')}
+            >
+              Login
+            </span>
+            <div
+              className="bg-indigo-500 text-white text-[12px] px-3.5 py-1.5 rounded-[6px] font-medium cursor-pointer hover:bg-indigo-600 transition-colors"
+              onClick={() => navigate('/signup')}
+            >
+              Get Started
+            </div>
 
-      {/* Hero */}
-      <section className="bg-white py-28 text-center">
-        <div className="max-w-3xl mx-auto px-6">
-          <span className="inline-block bg-indigo-50 text-indigo-700 rounded-full px-4 py-1.5 text-sm font-medium mb-6">
-            File Conversion API — Now in Beta
-          </span>
-          <h1 className="text-5xl font-bold text-slate-900 leading-tight">
-            Convert any file.<br />Instantly at scale.
-          </h1>
-          <p className="text-xl text-slate-500 mt-6 max-w-2xl mx-auto">
-            Transform files between 50+ formats with our powerful REST API. Video, audio, documents — all in one line of code.
-          </p>
-          <div className="mt-10 flex items-center justify-center gap-4">
-            <Link to="/signup" className="px-8 py-3.5 bg-indigo-600 text-white text-lg rounded-xl hover:bg-indigo-700 font-medium shadow-sm transition-colors">
-              Get Started Free
-            </Link>
-            <a href="#docs" className="px-8 py-3.5 border-2 border-slate-200 text-slate-700 text-lg rounded-xl hover:bg-slate-50 font-medium transition-colors">
-              View Docs
-            </a>
-          </div>
-          <p className="text-sm text-slate-400 mt-5">100 free credits on signup. No payment required.</p>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section className="bg-slate-50 py-24" id="docs">
-        <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">How it works</h2>
-          <p className="text-slate-500 text-center mb-14">Three steps to convert any file.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                n: '1',
-                title: 'Upload & Convert',
-                code: `curl -X POST https://api.zenvort.com/jobs \\
-  -H "Authorization: Bearer YOUR_KEY" \\
-  -F "file=@video.mp4" \\
-  -F "outputFormat=mp3"`
-              },
-              {
-                n: '2',
-                title: 'Poll Status',
-                code: `curl https://api.zenvort.com/jobs/{jobId} \\
-  -H "Authorization: Bearer YOUR_KEY"
-
-// {"status": "DONE", "outputUrl": "..."}`
-              },
-              {
-                n: '3',
-                title: 'Download Result',
-                code: `curl -o output.mp3 \\
-  "https://r2.zenvort.com/outputs/.../output.mp3"`
-              },
-            ].map((step, i) => (
-              <div key={i} className="bg-white rounded-xl p-6 shadow-sm border border-slate-200">
-                <div className="bg-indigo-600 text-white rounded-full w-8 h-8 flex items-center justify-center text-sm font-bold">{step.n}</div>
-                <h3 className="font-semibold text-slate-900 mt-4 mb-3">{step.title}</h3>
-                <pre className="bg-slate-900 text-green-400 rounded-lg p-4 text-xs font-mono overflow-x-auto whitespace-pre-wrap">{step.code}</pre>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Features */}
-      <section className="bg-white py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">Everything you need</h2>
-          <p className="text-slate-500 text-center mb-14">Built for developers, by developers.</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {features.map((f, i) => (
-              <div key={i} className="border border-slate-200 rounded-xl p-6 hover:shadow-md transition-shadow">
-                <div className="text-2xl mb-3">{f.icon}</div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-semibold text-slate-900">{f.title}</h3>
-                  {f.subtitle && <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">{f.subtitle}</span>}
-                </div>
-                <p className="text-sm text-slate-500">{f.desc}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Pricing */}
-      <section className="bg-slate-50 py-24">
-        <div className="max-w-5xl mx-auto px-6">
-          <h2 className="text-3xl font-bold text-slate-900 text-center mb-4">Simple, credit-based pricing</h2>
-          <p className="text-slate-500 text-center mb-14">Buy credits, use them whenever. No subscriptions.</p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {(loading ? plans : plansData.map((p, i) => ({ ...p, _i: i }))).map((plan, i) => (
-              <div key={i} className={`bg-white rounded-2xl p-8 border ${plan.featured || plan._i === 1 ? 'border-indigo-600 border-2 relative' : 'border-slate-200'}`}>
-                {(plan.featured || plan._i === 1) && (
-                  <span className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-600 text-white px-4 py-1 rounded-full text-xs font-medium">Most Popular</span>
+            {/* Dark mode toggle — pill with sun/moon */}
+            <button
+              onClick={toggleDark}
+              className={cn(
+                'relative inline-flex items-center w-14 h-7 rounded-full border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2',
+                dark
+                  ? 'bg-indigo-600 border-indigo-400'
+                  : 'bg-slate-200 border-slate-400'
+              )}
+              aria-label={dark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              <span
+                className={cn(
+                  'inline-block w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform duration-300',
+                  dark ? 'translate-x-7' : 'translate-x-1'
                 )}
-                <h3 className="font-bold text-lg text-slate-900">{plan.name || plan.pack}</h3>
-                <div className="flex items-baseline gap-1 mt-4 mb-6">
-                  <span className="text-3xl font-bold text-indigo-600">{plan.credits}</span>
-                  <span className="text-slate-500">credits</span>
-                </div>
-                <div className="text-2xl font-bold text-slate-900 mb-6">{plan.amount || plan.price}</div>
-                <ul className="space-y-2 mb-8">
-                  {(plan.features || [`${plan.credits} credits`, 'All formats', 'Webhooks', 'API access']).map((f, j) => (
-                    <li key={j} className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="text-green-500">✓</span> {f}
-                    </li>
-                  ))}
-                </ul>
-                <Link to="/signup" className={`block text-center py-2.5 rounded-lg font-medium transition-colors ${plan.featured || plan._i === 1 ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'border border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
-                  Get Started
-                </Link>
-              </div>
-            ))}
+              />
+              <Sun
+                size={12}
+                className={cn(
+                  'absolute transition-opacity duration-300',
+                  dark ? 'opacity-30 text-indigo-200 left-1.5' : 'opacity-100 text-amber-500 left-1.5'
+                )}
+              />
+              <Moon
+                size={12}
+                className={cn(
+                  'absolute transition-opacity duration-300',
+                  dark ? 'opacity-100 text-white right-1.5' : 'opacity-30 text-slate-400 right-1.5'
+                )}
+              />
+            </button>
           </div>
+        </div>
+      </div>
+
+      {/* ── Hero ── */}
+      <section className="px-6 py-12 text-center bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+        {/* Beta badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-300 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-sm font-medium mb-5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
+          Beta — 100 free credits on signup
+        </div>
+
+        {/* Heading */}
+        <h1 className="text-[32px] font-medium text-slate-900 dark:text-white leading-tight mb-3">
+          Convert any file.<br />
+          <span className="text-indigo-500">One API call.</span>
+        </h1>
+
+        {/* Subtext */}
+        <p className="text-[14px] text-slate-600 dark:text-slate-300 max-w-[420px] mx-auto mb-7 leading-relaxed">
+          38 formats — video, audio, images, documents. Powered by FFmpeg and LibreOffice. Store on Cloudflare R2.
+        </p>
+
+        {/* CTAs */}
+        <div className="flex gap-2.5 justify-center mb-3">
+          <div
+            className="bg-indigo-500 text-white text-[13px] px-5 py-2.5 rounded-[8px] font-medium cursor-pointer hover:bg-indigo-600 transition-colors"
+            onClick={() => navigate('/signup')}
+          >
+            Start converting free
+          </div>
+          <div
+            className="border-2 border-slate-800 dark:border-slate-300 text-slate-800 dark:text-slate-200 text-[13px] px-5 py-2.5 rounded-[8px] cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            onClick={() => {}}
+          >
+            See how it works
+          </div>
+        </div>
+
+        <div className="text-[11px] text-slate-500 dark:text-slate-500">No credit card required</div>
+      </section>
+
+      {/* ── Social proof bar ── */}
+      <section className="grid grid-cols-4 bg-slate-50 dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
+        {[
+          { value: '38', label: 'Formats supported' },
+          { value: 'FFmpeg', label: 'Video & audio engine' },
+          { value: 'R2', label: 'Cloudflare storage' },
+          { value: 'BullMQ', label: 'Async job queue' },
+        ].map((item, i) => (
+          <div
+            key={i}
+            className={`px-4 py-3.5 text-center ${i < 3 ? 'border-r border-slate-200 dark:border-slate-700' : ''}`}
+          >
+            <div className={`font-medium ${i === 0 ? 'text-indigo-500 text-[16px] font-semibold' : 'text-slate-900 dark:text-white text-[13px]'}`}>
+              {item.value}
+            </div>
+            <div className="text-[11px] text-slate-500 dark:text-slate-400">{item.label}</div>
+          </div>
+        ))}
+      </section>
+
+      {/* ── Pricing cards ── */}
+      <section className="px-6 py-6 bg-slate-50 dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
+        <div className="grid grid-cols-3 gap-3 max-w-[700px] mx-auto">
+          {plans.map((plan) => (
+            <div
+              key={plan.name}
+              className={cn(
+                'rounded-[10px] p-5 transition-colors duration-200 hover:border-indigo-400 dark:hover:border-indigo-500',
+                plan.highlight
+                  ? 'border-2 border-indigo-600 dark:border-indigo-400'
+                  : 'border-2 border-slate-900 dark:border-slate-600'
+              )}
+              style={{ position: 'relative' }}
+            >
+              {plan.highlight && (
+                <div className="absolute -top-[10px] left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] px-2.5 py-0.5 rounded-[10px] whitespace-nowrap font-medium z-10">
+                  Most popular
+                </div>
+              )}
+              {/* Plan name */}
+              <div className="text-[13px] font-semibold text-slate-900 dark:text-white mb-1">{plan.name}</div>
+              {/* Price */}
+              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-0.5">{plan.price}</div>
+              {/* Credits */}
+              <div className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-4">{plan.credits} credits</div>
+              {/* Feature list */}
+              <ul className="space-y-1">
+                {plan.features.map(f => (
+                  <li key={f} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                    <span className="text-emerald-600 dark:text-emerald-400 leading-none">✓</span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+              {/* CTA */}
+              <div
+                className={cn(
+                  'mt-4 px-2 py-2 rounded-[6px] text-[12px] text-center cursor-pointer transition-colors',
+                  plan.highlight
+                    ? 'bg-indigo-500 text-white hover:bg-indigo-600'
+                    : 'border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                )}
+                onClick={() => navigate('/signup')}
+              >
+                {plan.cta}
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="bg-slate-900 text-white py-14">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col md:flex-row justify-between items-start gap-8">
-          <div>
-            <h2 className="font-bold text-xl mb-2">Zenvort</h2>
-            <p className="text-slate-400 text-sm">Convert any file. Instantly at scale.</p>
+      {/* ── Footer ── */}
+      <footer className="bg-indigo-50 dark:bg-slate-900 border-t-2 border-indigo-200 dark:border-slate-700 px-6 py-4">
+        <div className="flex items-center justify-between max-w-[700px] mx-auto">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 bg-indigo-600 rounded" />
+            <span className="text-[12px] font-semibold text-indigo-700 dark:text-indigo-300">Zenvort</span>
           </div>
-          <div className="flex gap-8 text-sm">
-            <a href="#" className="text-slate-300 hover:text-white transition-colors">Docs</a>
-            <a href="#" className="text-slate-300 hover:text-white transition-colors">GitHub</a>
-            <a href="#" className="text-slate-300 hover:text-white transition-colors">Status</a>
-          </div>
-        </div>
-        <div className="max-w-6xl mx-auto px-6 mt-10 pt-8 border-t border-slate-800 text-slate-400 text-sm">
-          © 2024 Zenvort. All rights reserved.
+          <span className="text-[11px] text-slate-500 dark:text-slate-500">© 2026 Zenvort. All rights reserved.</span>
         </div>
       </footer>
+
     </div>
-  );
+  )
 }

@@ -11,8 +11,25 @@ import { startCleanupCron } from "./cron/cleanup.js";
 
 const execAsync = promisify(exec);
 
-const VIDEO_AUDIO_FORMATS = ["mp4", "mov", "avi", "mkv", "webm", "mp3", "wav", "aac", "flac"];
-const libreOfficeFormats = ['pdf', 'docx', 'doc', 'pptx', 'xlsx', 'odt', 'html', 'txt'];
+const VIDEO_FORMATS = [
+  "mp4", "mov", "avi", "mkv", "webm",
+  "wmv", "flv", "m4v", "3gp", "ts", "mts"
+];
+
+const AUDIO_FORMATS = [
+  "mp3", "wav", "aac", "flac",
+  "m4a", "opus", "ogg", "wma"
+];
+
+const IMAGE_FORMATS = [
+  "jpg", "jpeg", "png", "webp",
+  "gif", "bmp", "tiff"
+];
+const DOCUMENT_FORMATS = [
+  "pdf", "docx", "doc", "pptx", "xlsx",
+  "odt", "html", "txt", "csv",
+  "ods", "odp", "rtf"
+];
 
 async function sendWebhook(
   userId: string,
@@ -87,10 +104,20 @@ async function processJob(job: BullJob<ConversionJobData>): Promise<void> {
     outputPath = `/tmp/${jobId}-output.${outputFormat}`;
 
     // 3. Determine converter based on inputFormat
-    if (VIDEO_AUDIO_FORMATS.includes(inputFormat) || VIDEO_AUDIO_FORMATS.includes(outputFormat)) {
+    if (
+      VIDEO_FORMATS.includes(inputFormat) ||
+      VIDEO_FORMATS.includes(outputFormat) ||
+      AUDIO_FORMATS.includes(inputFormat) ||
+      AUDIO_FORMATS.includes(outputFormat)
+    ) {
       // 4. FFmpeg conversion
       await convertWithFFmpeg(inputPath, outputPath, outputFormat);
-    } else if (libreOfficeFormats.includes(inputFormat)) {
+    } else if (
+      IMAGE_FORMATS.includes(inputFormat) ||
+      IMAGE_FORMATS.includes(outputFormat)
+    ) {
+      await convertWithFFmpeg(inputPath, outputPath, outputFormat);
+    } else if (DOCUMENT_FORMATS.includes(inputFormat)) {
       // 5. LibreOffice conversion
       convertedPath = await convertWithLibreOffice(inputPath, outputFormat);
       // If LibreOffice output path differs from expected, move it

@@ -1,0 +1,189 @@
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans)}
+.z-wrap{width:100%;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden}
+.z-section{padding:0 0 2rem 0}
+.z-label{font-size:11px;font-weight:500;color:var(--color-text-tertiary);letter-spacing:.08em;padding:8px 16px;border-bottom:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)}
+</style>
+
+<div class="z-wrap">
+
+<div class="z-label">LANDING — NAVBAR</div>
+<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 24px;background:var(--color-background-primary);border-bottom:0.5px solid var(--color-border-tertiary)">
+  <div style="display:flex;align-items:center;gap:8px">
+    <div style="width:22px;height:22px;background:#6366f1;border-radius:6px"></div>
+    <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">Zenvort</span>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <span style="font-size:13px;color:var(--color-text-secondary);cursor:pointer">Login</span>
+    <div style="background:#6366f1;color:#fff;font-size:12px;padding:6px 14px;border-radius:6px;font-weight:500">Get Started</div>
+    <div style="width:28px;height:18px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:10px;display:flex;align-items:center;padding:2px">
+      <div style="width:14px;height:14px;background:var(--color-text-tertiary);border-radius:50%"></div>
+    </div>
+  </div>
+</div>
+
+<div class="z-label">LANDING — HERO</div>
+<div style="padding:48px 24px 40px;background:var(--color-background-primary);text-align:center">
+  <div style="display:inline-flex;align-items:center;gap:6px;background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:20px;padding:4px 12px;margin-bottom:20px">
+    <div style="width:6px;height:6px;background:#10b981;border-radius:50%"></div>
+    <span style="font-size:12px;color:var(--color-text-secondary)">Beta — 100 free credits on signup</span>
+  </div>
+  <div style="font-size:32px;font-weight:500;color:var(--color-text-primary);line-height:1.2;margin-bottom:12px">Convert any file.<br><span style="color:#6366f1">One API call.</span></div>
+  <div style="font-size:14px;color:var(--color-text-secondary);max-width:420px;margin:0 auto 28px;line-height:1.6">38 formats — video, audio, images, documents. Powered by FFmpeg and LibreOffice. Store on Cloudflare R2.</div>
+  <div style="display:flex;gap:10px;justify-content:center;margin-bottom:12px">
+    <div style="background:#6366f1;color:#fff;font-size:13px;padding:10px 20px;border-radius:8px;font-weight:500">Start converting free</div>
+    <div style="border:0.5px solid var(--color-border-secondary);color:var(--color-text-secondary);font-size:13px;padding:10px 20px;border-radius:8px">See how it works</div>
+  </div>
+  <div style="font-size:11px;color:var(--color-text-tertiary)">No credit card required</div>
+</div>
+
+<div class="z-label">LANDING — SOCIAL PROOF BAR</div>
+<div style="display:grid;grid-template-columns:repeat(4,1fr);background:var(--color-background-secondary);border-top:0.5px solid var(--color-border-tertiary);border-bottom:0.5px solid var(--color-border-tertiary)">
+  <div style="padding:14px;text-align:center;border-right:0.5px solid var(--color-border-tertiary)">
+    <div style="font-size:16px;font-weight:500;color:#6366f1">38</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary)">Formats supported</div>
+  </div>
+  <div style="padding:14px;text-align:center;border-right:0.5px solid var(--color-border-tertiary)">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">FFmpeg</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary)">Video & audio engine</div>
+  </div>
+  <div style="padding:14px;text-align:center;border-right:0.5px solid var(--color-border-tertiary)">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">R2</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary)">Cloudflare storage</div>
+  </div>
+  <div style="padding:14px;text-align:center">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">BullMQ</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary)">Async job queue</div>
+  </div>
+</div>
+
+<div class="z-label">LANDING — PRICING CARDS</div>
+<div style="padding:24px;background:var(--color-background-primary);display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
+  <div style="border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:20px">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px">Starter</div>
+    <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px">&#8377;199</div>
+    <div style="font-size:12px;color:#f59e0b;margin-bottom:16px;font-weight:500">500 credits</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary);line-height:1.8">500 conversions<br>All 38 formats<br>Webhook support<br>REST API access</div>
+    <div style="margin-top:16px;border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:8px;text-align:center;font-size:12px;color:var(--color-text-secondary)">Get started</div>
+  </div>
+  <div style="border:2px solid #6366f1;border-radius:var(--border-radius-lg);padding:20px;position:relative">
+    <div style="position:absolute;top:-10px;left:50%;transform:translateX(-50%);background:#6366f1;color:#fff;font-size:10px;padding:2px 10px;border-radius:10px;white-space:nowrap">Most popular</div>
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px">Pro</div>
+    <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px">&#8377;599</div>
+    <div style="font-size:12px;color:#f59e0b;margin-bottom:16px;font-weight:500">2,000 credits</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary);line-height:1.8">2000 conversions<br>All 38 formats<br>Webhook support<br>REST API access</div>
+    <div style="margin-top:16px;background:#6366f1;border-radius:6px;padding:8px;text-align:center;font-size:12px;color:#fff">Get started</div>
+  </div>
+  <div style="border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:20px">
+    <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px">Enterprise</div>
+    <div style="font-size:24px;font-weight:500;color:var(--color-text-primary);margin-bottom:2px">&#8377;1,999</div>
+    <div style="font-size:12px;color:#f59e0b;margin-bottom:16px;font-weight:500">10,000 credits</div>
+    <div style="font-size:11px;color:var(--color-text-tertiary);line-height:1.8">10000 conversions<br>All 38 formats<br>Webhook support<br>REST API access</div>
+    <div style="margin-top:16px;border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:8px;text-align:center;font-size:12px;color:var(--color-text-secondary)">Get started</div>
+  </div>
+</div>
+
+<div class="z-label">APP — DASHBOARD</div>
+<div style="display:flex;background:var(--color-background-primary);min-height:320px">
+  <div style="width:180px;background:#0f172a;padding:16px;display:flex;flex-direction:column;gap:4px;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px">
+      <div style="width:18px;height:18px;background:#6366f1;border-radius:4px"></div>
+      <span style="font-size:13px;font-weight:500;color:#fff">Zenvort</span>
+    </div>
+    <div style="background:rgba(99,102,241,0.15);border-left:2px solid #6366f1;border-radius:0 6px 6px 0;padding:8px 10px;font-size:12px;color:#6366f1;font-weight:500">Dashboard</div>
+    <div style="padding:8px 10px;font-size:12px;color:#64748b">API Key</div>
+    <div style="padding:8px 10px;font-size:12px;color:#64748b">Billing</div>
+    <div style="padding:8px 10px;font-size:12px;color:#64748b">Admin</div>
+    <div style="margin-top:auto;padding:8px 10px;font-size:11px;color:#475569">user@example.com</div>
+    <div style="padding:6px 10px;font-size:11px;color:#64748b;border:0.5px solid #1e293b;border-radius:6px;text-align:center">Sign out</div>
+  </div>
+  <div style="flex:1;padding:20px;display:flex;flex-direction:column;gap:16px;background:var(--color-background-tertiary)">
+    <div style="display:flex;align-items:center;justify-content:space-between;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 16px">
+      <span style="font-size:13px;font-weight:500;color:var(--color-text-primary)">Dashboard</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <div style="background:#fef3c7;border:0.5px solid #f59e0b;border-radius:20px;padding:3px 10px;font-size:11px;color:#92400e;font-weight:500">97 credits</div>
+        <div style="font-size:11px;color:var(--color-text-tertiary)">user@example.com</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px">
+        <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:6px">Credits</div>
+        <div style="font-size:20px;font-weight:500;color:#f59e0b">97</div>
+      </div>
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px">
+        <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:6px">Total jobs</div>
+        <div style="font-size:20px;font-weight:500;color:#6366f1">3</div>
+      </div>
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px">
+        <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:6px">Jobs today</div>
+        <div style="font-size:20px;font-weight:500;color:#10b981">3</div>
+      </div>
+      <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:12px">
+        <div style="font-size:10px;color:var(--color-text-tertiary);margin-bottom:6px">Success rate</div>
+        <div style="font-size:20px;font-weight:500;color:#10b981">100%</div>
+      </div>
+    </div>
+    <div style="background:var(--color-background-primary);border:2px dashed var(--color-border-secondary);border-radius:var(--border-radius-lg);padding:28px;text-align:center">
+      <div style="width:32px;height:32px;background:var(--color-background-secondary);border-radius:8px;margin:0 auto 10px;display:flex;align-items:center;justify-content:center">
+        <div style="width:16px;height:2px;background:var(--color-text-tertiary)"></div>
+      </div>
+      <div style="font-size:13px;color:var(--color-text-secondary);margin-bottom:4px">Drop your file here or click to browse</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary)">38 formats supported — video, audio, image, document</div>
+    </div>
+    <div style="background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);overflow:hidden">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;padding:8px 14px;background:var(--color-background-secondary);border-bottom:0.5px solid var(--color-border-tertiary)">
+        <span style="font-size:10px;color:var(--color-text-tertiary)">JOB ID</span>
+        <span style="font-size:10px;color:var(--color-text-tertiary)">INPUT</span>
+        <span style="font-size:10px;color:var(--color-text-tertiary)">OUTPUT</span>
+        <span style="font-size:10px;color:var(--color-text-tertiary)">STATUS</span>
+        <span style="font-size:10px;color:var(--color-text-tertiary)">ACTION</span>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;padding:10px 14px;border-bottom:0.5px solid var(--color-border-tertiary);align-items:center">
+        <span style="font-size:11px;color:var(--color-text-secondary);font-family:var(--font-mono)">abc12345</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">pdf</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">docx</span>
+        <span style="display:inline-flex"><span style="background:#d1fae5;color:#065f46;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500">DONE</span></span>
+        <span style="font-size:11px;color:#6366f1;cursor:pointer">Download</span>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;padding:10px 14px;border-bottom:0.5px solid var(--color-border-tertiary);align-items:center">
+        <span style="font-size:11px;color:var(--color-text-secondary);font-family:var(--font-mono)">def67890</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">mp4</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">mp3</span>
+        <span style="display:inline-flex"><span style="background:#dbeafe;color:#1e40af;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500">PROCESSING</span></span>
+        <span style="font-size:11px;color:var(--color-text-tertiary)">—</span>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 80px;padding:10px 14px;align-items:center">
+        <span style="font-size:11px;color:var(--color-text-secondary);font-family:var(--font-mono)">ghi11223</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">png</span>
+        <span style="font-size:11px;color:var(--color-text-secondary)">webp</span>
+        <span style="display:inline-flex"><span style="background:#fef3c7;color:#92400e;font-size:10px;padding:2px 8px;border-radius:10px;font-weight:500">PENDING</span></span>
+        <span style="font-size:11px;color:var(--color-text-tertiary)">—</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="z-label">APP — LOGIN CARD</div>
+<div style="padding:24px;background:var(--color-background-tertiary);display:flex;justify-content:center">
+  <div style="width:340px;background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:28px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:24px;justify-content:center">
+      <div style="width:20px;height:20px;background:#6366f1;border-radius:5px"></div>
+      <span style="font-size:15px;font-weight:500;color:var(--color-text-primary)">Zenvort</span>
+    </div>
+    <div style="font-size:16px;font-weight:500;color:var(--color-text-primary);margin-bottom:4px">Welcome back</div>
+    <div style="font-size:12px;color:var(--color-text-tertiary);margin-bottom:20px">Sign in to your account</div>
+    <div style="margin-bottom:12px">
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">Email</div>
+      <div style="border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:9px 12px;font-size:12px;color:var(--color-text-tertiary)">you@example.com</div>
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;color:var(--color-text-secondary);margin-bottom:6px">Password</div>
+      <div style="border:0.5px solid var(--color-border-secondary);border-radius:6px;padding:9px 12px;font-size:12px;color:var(--color-text-tertiary);display:flex;justify-content:space-between"><span>••••••••</span><span style="color:var(--color-text-tertiary)">show</span></div>
+    </div>
+    <div style="background:#6366f1;color:#fff;font-size:13px;padding:10px;border-radius:6px;text-align:center;font-weight:500;margin-bottom:16px">Sign in</div>
+    <div style="text-align:center;font-size:11px;color:var(--color-text-tertiary)">No account? <span style="color:#6366f1">Sign up free</span></div>
+  </div>
+</div>
+
+</div>

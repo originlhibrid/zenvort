@@ -1,78 +1,87 @@
-import React, { useState } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { api } from '../api';
-import { Store } from '../store';
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/lib/store'
 
-export function Login() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(location.state?.success || '');
-  const [loading, setLoading] = useState(false);
+export default function Login() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [showPw, setShowPw] = useState(false)
+  const { dispatch } = useAuth()
+  const navigate = useNavigate()
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError('');
-    setLoading(true);
-    try {
-      const data = await api.login(email, password);
-      Store.setAuth(data.apiKey, data.user);
-      navigate('/dashboard');
-    } catch (err) {
-      setError(err.message || 'Login failed');
-    } finally {
-      setLoading(false);
+  const handleLogin = (e) => {
+    e.preventDefault()
+    // Demo login — no real API call
+    const mockUser = {
+      email,
+      credits: 97,
+      apiKey: 'zv_live_demo_key_12345',
     }
-  };
+    localStorage.setItem('zenvort_user', JSON.stringify(mockUser))
+    localStorage.setItem('zenvort_token', 'demo_token')
+    dispatch({ type: 'LOGIN', payload: mockUser })
+    dispatch({ type: 'SET_CREDITS', payload: 97 })
+    dispatch({ type: 'SET_API_KEY', payload: mockUser.apiKey })
+    navigate('/dashboard')
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <Link to="/" className="font-bold text-2xl text-slate-900">Zenvort</Link>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-6">
+      <div className="w-[340px] bg-white border border-border rounded-[10px] p-7 dark:bg-slate-900 dark:border-slate-800">
+        {/* Logo */}
+        <div className="flex items-center gap-2 mb-6 justify-center">
+          <div className="w-[20px] h-[20px] bg-primary rounded-[5px] flex-shrink-0" style={{ width: 20, height: 20 }} />
+          <span className="text-[15px] font-medium text-text-primary">Zenvort</span>
         </div>
-        <div className="bg-white rounded-2xl shadow-lg p-8">
-          <h1 className="text-2xl font-bold text-slate-900 mb-8 text-center">Welcome back</h1>
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-3 text-sm">{error}</div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
+
+        <h2 className="text-[16px] font-medium text-text-primary mb-1">Welcome back</h2>
+        <p className="text-[12px] text-text-tertiary mb-5">Sign in to your account</p>
+
+        <form onSubmit={handleLogin}>
+          <div className="mb-3">
+            <label className="text-[11px] font-medium text-text-secondary mb-1.5 block">Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              className="w-full border border-border rounded-[6px] px-3 py-2 text-[12px] text-text-tertiary bg-white placeholder:text-text-tertiary focus:outline-none focus:ring-1 focus:ring-primary transition-colors dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+              required
+            />
+          </div>
+
+          <div className="mb-5">
+            <label className="text-[11px] font-medium text-text-secondary mb-1.5 block">Password</label>
+            <div className="flex items-center border border-border rounded-[6px] px-3 py-2 gap-2 bg-white dark:bg-slate-800 dark:border-slate-700">
               <input
-                type="email"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                placeholder="you@example.com"
-                className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">Password</label>
-              <input
-                type="password"
+                type={showPw ? 'text' : 'password'}
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                required
                 placeholder="••••••••"
-                className="w-full border border-slate-300 rounded-lg px-4 py-2.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                className="flex-1 text-[12px] text-text-tertiary bg-transparent placeholder:text-text-tertiary focus:outline-none dark:text-slate-300"
+                required
               />
+              <span
+                className="text-[11px] text-text-tertiary cursor-pointer hover:text-text-secondary"
+                onClick={() => setShowPw(!showPw)}
+              >
+                {showPw ? 'hide' : 'show'}
+              </span>
             </div>
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-indigo-600 text-white rounded-lg py-2.5 font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
-            >
-              {loading ? 'Signing in...' : 'Sign In'}
-            </button>
-          </form>
-          <p className="text-center mt-6 text-slate-600 text-sm">
-            Don't have an account? <Link to="/signup" className="text-indigo-600 hover:underline font-medium">Sign up</Link>
-          </p>
-        </div>
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-primary text-white text-[13px] py-2.5 rounded-[6px] font-medium cursor-pointer hover:bg-primary/90 transition-colors"
+          >
+            Sign in
+          </button>
+        </form>
+
+        <p className="text-center text-[11px] text-text-tertiary mt-4">
+          No account? <span className="text-primary cursor-pointer hover:underline" onClick={() => navigate('/signup')}>Sign up free</span>
+        </p>
       </div>
     </div>
-  );
+  )
 }

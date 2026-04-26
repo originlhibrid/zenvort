@@ -1,7 +1,48 @@
 {
   "permissions": {
     "allow": [
-      "Bash(docker-compose up *)"
+      "Bash(docker-compose up *)",
+      "Bash(bash --version)",
+      "Bash(chmod +x *)",
+      "Bash(cmd //c 'reg add \"HKCU\\\\Software\\\\Classes\\\\start\" /ve /d \"PowerShell Script\" /f')",
+      "Bash(cmd //c 'reg add \"HKCU\\\\Software\\\\Classes\\\\start\\\\DefaultIcon\" /ve /d \"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe,0\" /f')",
+      "Bash(cmd //c 'reg add \"HKCU\\\\Software\\\\Classes\\\\start\\\\shell\\\\open\\\\command\" /ve /d \"\\\\\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\\\\\" -File \\\\\"%1\\\\\"\" /f')",
+      "Bash(cmd /c 'assoc .start=PowerShellScript')",
+      "Bash(cmd /c 'ftype PowerShellScript=\"C:\\\\Windows\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe\" -File \"%1\"')",
+      "Bash(powershell *)",
+      "Bash(dir /c/Users/palai/Documents/Projects/Zenvort/start*)",
+      "Bash(curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"test@zenvort.com\",\"password\":\"password123\"}')",
+      "Bash(curl -s -X POST http://localhost:3000/auth/login -H 'Content-Type: application/json' -d '{\"email\":\"test@zenvort.com\",\"password\":\"admin\"}')",
+      "Bash(curl *)",
+      "Bash(dd if=/dev/urandom of=/tmp/test_video.mp4 bs=1024 count=100)",
+      "Bash(dd if=/dev/urandom of=/tmp/test_image.png bs=1024 count=50)",
+      "Bash(dd if=/dev/urandom of=/tmp/test_doc.docx bs=1024 count=50)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('status'\\), d.get\\('error',''\\)\\)\")",
+      "Bash(docker compose *)",
+      "Bash(python3 *)",
+      "Bash(where python3 *)",
+      "Bash(where python *)",
+      "Bash(cmd /c \"where python\")",
+      "Bash(cmd *)",
+      "Bash(npm run *)",
+      "Bash(ls vite.config.*)",
+      "Bash(cat vite.config.js)",
+      "Bash(npm install *)",
+      "Bash(taskkill /F /IM node.exe)",
+      "Bash(rm -rf zenvort-dashboard)",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //PID 3340)",
+      "Bash(taskkill //F //PID 20604)",
+      "Bash(taskkill //F //PID 20832)",
+      "Bash(taskkill //F //PID 3880)",
+      "Bash(taskkill //F //PID 1000)",
+      "Bash(npm create *)",
+      "Bash(npx tailwindcss *)",
+      "Bash(taskkill //F //IM node.exe)"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "agentmemory"
+  ]
 }
