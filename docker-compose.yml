@@ -1,6 +1,9 @@
+version: "3.9"
+
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: zenvort-postgres
     environment:
       POSTGRES_DB: zenvort
       POSTGRES_USER: zenvort
@@ -17,13 +20,27 @@ services:
 
   redis:
     image: redis:7-alpine
+    container_name: zenvort-redis
     ports:
       - "6379:6379"
 
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: zenvort-gotenberg
+    restart: unless-stopped
+    expose:
+      - "3002"
+    command:
+      - "gotenberg"
+      - "--chromium-disable-routes=true"
+      - "--libreoffice-restart-after=10"
+      - "--api-timeout=60s"
+
   api:
+    container_name: zenvort-api
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: api/Dockerfile
     ports:
       - "3000:3000"
     depends_on:
@@ -34,44 +51,34 @@ services:
     env_file:
       - .env
     restart: unless-stopped
-    command: node apps/api/dist/index.js
 
   worker:
+    container_name: zenvort-worker
     build:
       context: .
-      dockerfile: apps/worker/Dockerfile
+      dockerfile: worker/Dockerfile
     expose:
-      - "3001"   # Metrics + health (internal only — not published to host)
+      - "3001"
     depends_on:
       - postgres
       - redis
+      - gotenberg
       - api
     env_file:
       - .env
     restart: unless-stopped
-    command: node apps/worker/dist/index.js
 
   migrate:
+    container_name: zenvort-migrate
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
-    command: sh -c "npx prisma migrate deploy --schema=./packages/db/prisma/schema.prisma"
+      dockerfile: api/Dockerfile
+    command: ["alembic", "upgrade", "head"]
     env_file:
       - .env
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
-
-  seed:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    command: node packages/db/seed.cjs
-    env_file:
-      - .env
-    depends_on:
-      - migrate
     restart: "no"
 
 volumes:

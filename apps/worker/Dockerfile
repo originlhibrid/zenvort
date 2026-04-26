@@ -49,6 +49,7 @@ RUN pnpm rebuild
 # Build packages first, then the worker
 # Generate Prisma client at root, then build TypeScript directly
 RUN pnpm exec prisma generate --schema=./packages/db/prisma/schema.prisma && \
+    pnpm exec tsc --project packages/shared/tsconfig.json && \
     pnpm exec tsc --project packages/db/tsconfig.json && \
     pnpm exec tsc --project packages/queue/tsconfig.json && \
     pnpm exec tsc --project packages/storage/tsconfig.json && \
