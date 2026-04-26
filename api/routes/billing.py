@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy import select, func
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta
 
@@ -9,12 +9,16 @@ from api.deps import get_current_user
 from api.schemas import (
     PlanSchema,
     BillingPurchaseResponse,
+    BillingPurchaseRequest,
     BillingUsageResponse,
     BillingTransactionsResponse,
     CreditLogSchema,
 )
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 PLANS = [
     PlanSchema(pack="starter", credits=500, amount=199, currency="INR", name="Starter Pack"),
@@ -29,44 +33,59 @@ async def get_plans():
 
 
 @router.post("/purchase", response_model=BillingPurchaseResponse)
+@limiter.limit("5/minute")
 async def purchase_credits(
+    request: Request,
+    body: BillingPurchaseRequest,
     current_user: User = Depends(get_current_user),
 ):
     return BillingPurchaseResponse(ok=True, message="Payment integration coming soon")
 
 
 @router.get("/usage", response_model=BillingUsageResponse)
+@limiter.limit("30/minute")
 async def get_usage(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Total jobs
-    count_result = await db.execute(
-        select(func.count()).select_from(Job).where(Job.user_id == current_user.id)
-    )
-    total_jobs = count_result.scalar() or 0
-
-    # Jobs today
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    today_result = await db.execute(
-        select(func.count())
-        .select_from(Job)
-        .where(Job.user_id == current_user.id, Job.created_at >= today_start)
-    )
-    jobs_today = today_result.scalar() or 0
 
-    # Success rate
-    done_result = await db.execute(
-        select(func.count()).select_from(Job).where(Job.user_id == current_user.id, Job.status == "DONE")
+    agg_result = await db.execute(
+        select(
+            func.count().label("total"),
+            func.sum(case((Job.status == "DONE", 1), else_=0)).label("done"),
+            func.sum(case((Job.created_at >= today_start, 1), else_=0)).label("today"),
+        ).where(Job.user_id == current_user.id)
     )
-    done_count = done_result.scalar() or 0
+    row = agg_result.one()
+    total_jobs = row.total or 0
+    done_count = row.done or 0
+    jobs_today = row.today or 0
     success_rate = (done_count / total_jobs * 100) if total_jobs > 0 else 0.0
 
-    # Last 30 days daily usage
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+
+    daily_query = await db.execute(
+        select(
+            func.date(Job.created_at).label("date"),
+            func.count(Job.id).label("count"),
+        )
+        .where(
+            Job.user_id == current_user.id,
+            Job.created_at >= thirty_days_ago,
+            Job.status == "DONE",
+        )
+        .group_by(func.date(Job.created_at))
+        .order_by(func.date(Job.created_at))
+    )
+    daily_counts = {str(row.date): row.count for row in daily_query.all()}
+
     daily_usage = []
-    # (Simplified - real implementation would group by date)
-    daily_usage.append({"date": datetime.utcnow().strftime("%Y-%m-%d"), "count": jobs_today})
+    for i in range(30):
+        day = (datetime.utcnow() - timedelta(days=29 - i)).replace(hour=0, minute=0, second=0, microsecond=0)
+        date_str = day.strftime("%Y-%m-%d")
+        daily_usage.append({"date": date_str, "count": daily_counts.get(date_str, 0)})
 
     return BillingUsageResponse(
         credits=current_user.credits,

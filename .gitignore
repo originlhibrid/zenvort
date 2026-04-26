@@ -8,4 +8,7 @@ build/
 .DS_Store
 *.tsbuildinfo
 coverage/
-.nyc_output/
+.nyc_output/__pycache__/
+*.pyc
+db/alembic/versions/__pycache__/
+worker/__pycache__/

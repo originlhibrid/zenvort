@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,17 +11,24 @@ from api.schemas import (
     AdminStatsResponse,
     AdminCreditUpdateRequest,
 )
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 
 @router.get("/users", response_model=AdminUserListResponse)
+@limiter.limit("60/minute")
 async def list_users(
+    request: Request,
     page: int = 1,
     limit: int = 20,
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
+    page = max(page, 1)
+    limit = min(max(limit, 1), 100)
     offset = (page - 1) * limit
 
     count_result = await db.execute(select(func.count()).select_from(User))
@@ -41,7 +48,9 @@ async def list_users(
 
 
 @router.get("/stats", response_model=AdminStatsResponse)
+@limiter.limit("60/minute")
 async def get_stats(
+    request: Request,
     current_user: User = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -54,24 +63,28 @@ async def get_stats(
     total_credits_result = await db.execute(select(func.sum(User.credits)))
     total_credits = total_credits_result.scalar() or 0
 
-    # Jobs by status
-    status_counts = {}
+    # Jobs by status — single grouped query
+    status_result = await db.execute(
+        select(Job.status, func.count(Job.id))
+        .group_by(Job.status)
+    )
+    status_counts = {row[0]: row[1] for row in status_result.all()}
     for status in ["PENDING", "PROCESSING", "DONE", "FAILED"]:
-        count_result = await db.execute(
-            select(func.count()).select_from(Job).where(Job.status == status)
-        )
-        status_counts[status] = count_result.scalar() or 0
+        if status not in status_counts:
+            status_counts[status] = 0
 
     return AdminStatsResponse(
         totalUsers=total_users,
         totalJobs=total_jobs,
-        totalCredits=int(total_credits),
+        totalCredits=int(total_credits or 0),
         jobsByStatus=status_counts,
     )
 
 
 @router.patch("/users/{user_id}/credits")
+@limiter.limit("10/minute")
 async def update_user_credits(
+    request: Request,
     user_id: str,
     body: AdminCreditUpdateRequest,
     current_user: User = Depends(get_admin_user),

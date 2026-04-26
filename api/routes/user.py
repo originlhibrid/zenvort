@@ -1,3 +1,7 @@
+import logging
+import socket
+import urllib.parse
+import ipaddress
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +24,16 @@ async def update_webhook(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    current_user.webhook_url = body.webhookUrl
+    try:
+        host = urllib.parse.urlparse(body.webhook_url).hostname
+        ip = socket.gethostbyname(host)
+        if ipaddress.ip_address(ip).is_private or ipaddress.ip_address(ip).is_reserved:
+            raise HTTPException(400, "Webhook URL must not point to a private or reserved network")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(400, "Could not resolve webhook URL")
+
+    current_user.webhook_url = body.webhook_url
     await db.commit()
-    return WebhookUpdateResponse(ok=True, webhookUrl=body.webhookUrl)
+    return WebhookUpdateResponse(ok=True, webhook_url=body.webhook_url)

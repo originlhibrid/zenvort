@@ -1,4 +1,5 @@
 import hashlib
+import asyncio
 from fastapi import Depends, HTTPException, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,12 +15,12 @@ async def get_current_user(
         raise HTTPException(status_code=401, detail="Invalid authorization header")
 
     api_key = authorization.split(" ", 1)[1]
-    api_key_hash = hashlib.sha256(api_key.encode()).hexdigest()
-
-    result = await db.execute(
-        select(User).where(User.api_key_hash == api_key_hash)
+    api_key_hash = await asyncio.to_thread(
+        lambda: hashlib.sha256(api_key.encode()).hexdigest()
     )
-    user = result.scalar_one_or_none()
+
+    result = await db.execute(select(User).where(User.api_key_hash == api_key_hash))
+    user = result.scalars().first()
 
     if not user:
         raise HTTPException(status_code=401, detail="Invalid API key")

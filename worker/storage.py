@@ -1,37 +1,36 @@
 import boto3
-from botocore.config import Config
 from worker.config import get_settings
 
-settings = get_settings()
+_settings = None
 
 
-def get_s3_client():
-    return boto3.client(
+def _get_s3_client():
+    global _settings
+    if _settings is None:
+        _settings = get_settings()
+    s3 = boto3.Session(
+        aws_access_key_id=_settings.R2_ACCESS_KEY_ID,
+        aws_secret_access_key=_settings.R2_SECRET_ACCESS_KEY,
+    ).client(
         "s3",
-        endpoint_url=f"https://{settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-        aws_access_key_id=settings.R2_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
-        config=Config(signature_version="s3v4"),
+        endpoint_url=f"https://{_settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
         region_name="auto",
     )
+    return s3
 
 
-def upload_file(local_path: str, storage_key: str, content_type: str) -> str:
-    s3 = get_s3_client()
-    s3.upload_file(
+def upload_file(local_path: str, storage_key: str, content_type: str) -> None:
+    _get_s3_client().upload_file(
         local_path,
-        settings.R2_BUCKET_NAME,
+        get_settings().R2_BUCKET_NAME,
         storage_key,
         ExtraArgs={"ContentType": content_type},
     )
-    return f"{settings.R2_PUBLIC_URL}/{storage_key}"
 
 
 def download_file(storage_key: str, local_path: str) -> None:
-    s3 = get_s3_client()
-    s3.download_file(settings.R2_BUCKET_NAME, storage_key, local_path)
+    _get_s3_client().download_file(get_settings().R2_BUCKET_NAME, storage_key, local_path)
 
 
 def delete_file(storage_key: str) -> None:
-    s3 = get_s3_client()
-    s3.delete_object(Bucket=settings.R2_BUCKET_NAME, Key=storage_key)
+    _get_s3_client().delete_object(Bucket=get_settings().R2_BUCKET_NAME, Key=storage_key)

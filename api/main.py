@@ -1,5 +1,6 @@
+import logging
 import time
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
@@ -20,8 +21,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 
@@ -33,16 +34,22 @@ async def health():
     }
 
 
-app.include_router(auth.router, prefix="/auth", tags=["auth"])
-app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
-app.include_router(user.router, prefix="/user", tags=["user"])
-app.include_router(billing.router, prefix="/billing", tags=["billing"])
-app.include_router(admin.router, prefix="/admin", tags=["admin"])
+app.include_router(auth, prefix="/auth", tags=["auth"])
+app.include_router(jobs, prefix="/jobs", tags=["jobs"])
+app.include_router(user, prefix="/user", tags=["user"])
+app.include_router(billing, prefix="/billing", tags=["billing"])
+app.include_router(admin, prefix="/admin", tags=["admin"])
 
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    if isinstance(exc, HTTPException):
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"error": exc.detail},
+        )
+    logging.exception(exc)
     return JSONResponse(
         status_code=500,
-        content={"error": "Internal server error", "detail": str(exc)},
+        content={"error": "Internal server error"},
     )

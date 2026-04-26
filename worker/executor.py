@@ -20,17 +20,14 @@ def execute_conversion(
     input_format: str,
     output_format: str,
 ) -> dict:
-    # 1. Validate UUID
     try:
         uuid.UUID(job_id)
     except ValueError:
         raise ValueError(f"Invalid job ID: {job_id}")
 
-    # 2. Sanitize paths
     sanitize_and_assert_tmp_path(input_path)
     sanitize_and_assert_tmp_path(output_path)
 
-    # 3. Look up route
     route = get_route(input_format, output_format)
     if not route:
         raise RuntimeError(f"No conversion route for {input_format}→{output_format}")
@@ -40,7 +37,6 @@ def execute_conversion(
     for converter_fn in route["converters"]:
         converter_name = converter_fn.__module__ + "." + converter_fn.__name__
 
-        # Delete output before each attempt
         if os.path.exists(output_path):
             os.unlink(output_path)
 

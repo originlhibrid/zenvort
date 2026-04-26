@@ -121,6 +121,12 @@ class BillingPurchaseResponse(BaseModel):
     message: str = "Payment integration coming soon"
 
 
+class BillingPurchaseRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    pack: str
+
+
 class CreditLogSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
@@ -181,7 +187,7 @@ class AdminStatsResponse(BaseModel):
 class AdminCreditUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    amount: int
+    amount: int = Field(..., ge=-10000, le=10000)
     reason: str = Field(default="manual_add")
 
 
