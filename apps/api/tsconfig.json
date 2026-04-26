@@ -11,6 +11,7 @@
   "references": [
     { "path": "../../packages/db" },
     { "path": "../../packages/queue" },
+    { "path": "../../packages/shared" },
     { "path": "../../packages/storage" }
   ]
 }

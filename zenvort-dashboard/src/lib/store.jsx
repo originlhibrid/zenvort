@@ -36,7 +36,7 @@ export function AuthProvider({ children }) {
         const user = JSON.parse(stored)
         dispatch({ type: 'LOGIN', payload: user })
         dispatch({ type: 'SET_CREDITS', payload: user.credits || 0 })
-        dispatch({ type: 'SET_API_KEY', payload: user.apiKey || null })
+        dispatch({ type: 'SET_API_KEY', payload: user.apiKey || localStorage.getItem('zenvort_api_key') || null })
       } catch {}
     }
   }, [])

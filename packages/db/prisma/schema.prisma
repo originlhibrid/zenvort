@@ -28,6 +28,9 @@ model CreditLog {
   reason    String
   jobId     String?
   createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt(sort: Desc)])
 }
 
 model Job {
@@ -39,7 +42,13 @@ model Job {
   inputFormat  String
   outputFormat String
   error        String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  user         User?     @relation(fields: [userId], references: [id])
+  converterUsed String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  user         User?      @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([inputUrl, outputFormat, status])
 }

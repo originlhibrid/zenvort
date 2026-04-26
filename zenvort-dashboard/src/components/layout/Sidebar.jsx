@@ -14,7 +14,7 @@ export default function Sidebar() {
   const location = useLocation()
 
   const handleLogout = () => {
-    localStorage.removeItem('zenvort_token')
+    localStorage.removeItem('zenvort_api_key')
     localStorage.removeItem('zenvort_user')
     navigate('/login')
   }

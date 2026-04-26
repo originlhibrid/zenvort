@@ -40,6 +40,8 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
+    expose:
+      - "3001"   # Metrics + health (internal only — not published to host)
     depends_on:
       - postgres
       - redis

@@ -20,6 +20,7 @@ COPY apps/api/package.json apps/api/
 COPY packages/db/package.json packages/db/
 COPY packages/queue/package.json packages/queue/
 COPY packages/storage/package.json packages/storage/
+COPY packages/shared/package.json packages/shared/
 
 # Enable corepack and install dependencies
 RUN corepack enable && pnpm install --no-frozen-lockfile && pnpm approve-builds --all

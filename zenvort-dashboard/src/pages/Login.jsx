@@ -6,23 +6,34 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPw, setShowPw] = useState(false)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
   const { dispatch } = useAuth()
   const navigate = useNavigate()
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault()
-    // Demo login — no real API call
-    const mockUser = {
-      email,
-      credits: 97,
-      apiKey: 'zv_live_demo_key_12345',
+    setError('')
+    setLoading(true)
+    try {
+      const res = await fetch('http://localhost:3000/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || 'Login failed')
+      localStorage.setItem('zenvort_api_key', data.apiKey)
+      localStorage.setItem('zenvort_user', JSON.stringify(data.user))
+      dispatch({ type: 'LOGIN', payload: data.user })
+      dispatch({ type: 'SET_API_KEY', payload: data.apiKey })
+      dispatch({ type: 'SET_CREDITS', payload: data.user.credits })
+      navigate('/dashboard')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
-    localStorage.setItem('zenvort_user', JSON.stringify(mockUser))
-    localStorage.setItem('zenvort_token', 'demo_token')
-    dispatch({ type: 'LOGIN', payload: mockUser })
-    dispatch({ type: 'SET_CREDITS', payload: 97 })
-    dispatch({ type: 'SET_API_KEY', payload: mockUser.apiKey })
-    navigate('/dashboard')
   }
 
   return (
@@ -36,6 +47,12 @@ export default function Login() {
 
         <h2 className="text-[16px] font-medium text-text-primary mb-1">Welcome back</h2>
         <p className="text-[12px] text-text-tertiary mb-5">Sign in to your account</p>
+
+        {error && (
+          <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-[6px] text-[12px] text-red-600">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleLogin}>
           <div className="mb-3">
@@ -72,9 +89,10 @@ export default function Login() {
 
           <button
             type="submit"
-            className="w-full bg-primary text-white text-[13px] py-2.5 rounded-[6px] font-medium cursor-pointer hover:bg-primary/90 transition-colors"
+            disabled={loading}
+            className="w-full bg-primary text-white text-[13px] py-2.5 rounded-[6px] font-medium cursor-pointer hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Sign in
+            {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
 

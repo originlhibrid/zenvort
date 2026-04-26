@@ -1,14 +1,22 @@
-FROM node:20-alpine
+FROM node:20-bookworm
 
-# Install system dependencies for conversion
-RUN apk add --no-cache \
+# Install system dependencies for conversion tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    poppler-utils \
+    pandoc \
+    imagemagick \
+    ghostscript \
+    libvips-dev \
     ffmpeg \
     libreoffice \
-    ghostscript \
-    pandoc \
-    openssl \
-    openssl-dev \
-    chromium
+    && rm -rf /var/lib/apt/lists/*
+
+# Allow ImageMagick to write PDF output (denied by default in Debian)
+RUN sed -i \
+    -e 's/<policy domain="coder" rights="none" pattern="PDF"/<policy domain="coder" rights="read|write" pattern="PDF"/' \
+    -e 's/<policy domain="coder" rights="none" pattern="EPS"/<policy domain="coder" rights="read|write" pattern="EPS"/' \
+    -e 's/<policy domain="coder" rights="none" pattern="PS"/<policy domain="coder" rights="read|write" pattern="PS"/' \
+    /etc/ImageMagick-6/policy.xml
 
 WORKDIR /app
 
@@ -27,6 +35,7 @@ COPY apps/worker/package.json apps/worker/
 COPY packages/db/package.json packages/db/
 COPY packages/queue/package.json packages/queue/
 COPY packages/storage/package.json packages/storage/
+COPY packages/shared/package.json packages/shared/
 
 # Enable corepack and install dependencies
 RUN corepack enable && pnpm install --no-frozen-lockfile && pnpm approve-builds --all

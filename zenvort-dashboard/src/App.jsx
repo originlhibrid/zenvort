@@ -9,7 +9,7 @@ import Billing from '@/pages/Billing'
 import Admin from '@/pages/Admin'
 
 function ProtectedRoute({ children }) {
-  const token = localStorage.getItem('zenvort_token')
+  const token = localStorage.getItem('zenvort_api_key')
   if (!token) return <Navigate to="/login" replace />
   return children
 }

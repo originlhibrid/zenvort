@@ -3,10 +3,11 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   DeleteObjectCommand,
+  GetObjectCommandOutput,
 } from "@aws-sdk/client-s3";
-import { Readable } from "stream";
 import { createWriteStream } from "fs";
 import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 
 const s3 = new S3Client({
   region: "auto",
@@ -41,17 +42,21 @@ export async function uploadFile(
 }
 
 export async function downloadFile(key: string, destPath: string): Promise<void> {
-  const response = await s3.send(
+  const response: GetObjectCommandOutput = await s3.send(
     new GetObjectCommand({ Bucket: bucket, Key: key })
   );
 
-  if (!response.Body) {
-    throw new Error("No body in response");
+  const body = response.Body;
+
+  if (!body) {
+    throw new Error(`R2 response body is empty for key: ${key}`);
   }
 
-  const body = response.Body as Readable;
+  // Cast to Readable — S3 SDK always returns a streaming body with pipe()
+  const bodyStream = body as unknown as Readable;
   const writeStream = createWriteStream(destPath);
-  await pipeline(body, writeStream);
+
+  await pipeline(bodyStream, writeStream);
 }
 
 export async function deleteFile(key: string): Promise<void> {

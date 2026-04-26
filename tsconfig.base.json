@@ -19,6 +19,7 @@
       "@zenvort/worker": ["apps/worker/src"],
       "@zenvort/db": ["packages/db/src"],
       "@zenvort/queue": ["packages/queue/src"],
+      "@zenvort/shared": ["packages/shared/src"],
       "@zenvort/storage": ["packages/storage/src"]
     }
   },

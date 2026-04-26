@@ -1,5 +1,5 @@
 import { Queue } from "bullmq";
-import redisConnection from "./connection.js";
+import { redisConnection } from "./connection.js";
 
 export { redisConnection };
 
@@ -21,5 +21,5 @@ export const conversionsQueue = new Queue<ConversionJobData>("conversions", {
     },
     removeOnComplete: 100,
     removeOnFail: 200,
-  },
+  } as any, // timeout handled by worker lockDuration
 });
