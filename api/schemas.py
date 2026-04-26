@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, Self
+from typing import Any
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 import re
 
@@ -17,7 +17,11 @@ def to_camel(s: str) -> str:
 
 
 class UserSchema(BaseModel):
+    """Used for API responses. Fields are camelCase (alias) so JSON is camelCase.
+    validation_alias lets Pydantic read snake_case SQLAlchemy model attributes."""
+
     model_config = ConfigDict(
+        from_attributes=True,
         populate_by_name=True,
         alias_generator=to_camel,
     )
@@ -26,27 +30,29 @@ class UserSchema(BaseModel):
     email: str
     credits: int
     role: str = "user"
-    webhookUrl: str | None = None
-    createdAt: datetime | None = None
+    webhook_url: str | None = Field(default=None, validation_alias="webhookUrl")
+    created_at: datetime | None = Field(default=None, validation_alias="createdAt")
 
 
 class UserSignupResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, alias_generator=to_camel)
 
-    apiKey: str
+    api_key: str = Field(validation_alias="apiKey")
     user: UserSchema
 
 
 class UserLoginResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True, alias_generator=to_camel)
 
-    apiKey: str
+    api_key: str = Field(validation_alias="apiKey")
     user: UserSchema
 
 
 class WebhookUpdateResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
     ok: bool = True
-    webhookUrl: str
+    webhook_url: str = Field(validation_alias="webhookUrl")
 
 
 # ── Auth ─────────────────────────────────────────────────────────────────────
@@ -70,30 +76,37 @@ class LoginRequest(BaseModel):
 
 
 class JobSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    """API response schema. camelCase fields via alias_generator.
+    validation_alias reads snake_case SQLAlchemy model attributes."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
 
     id: str
     status: str
-    inputUrl: str
-    outputUrl: str | None = None
-    inputFormat: str
-    outputFormat: str
+    input_url: str = Field(validation_alias="inputUrl")
+    output_url: str | None = Field(default=None, validation_alias="outputUrl")
+    input_format: str = Field(validation_alias="inputFormat")
+    output_format: str = Field(validation_alias="outputFormat")
     error: str | None = None
-    converterUsed: str | None = None
-    createdAt: datetime | None = None
-    updatedAt: datetime | None = None
+    converter_used: str | None = Field(default=None, validation_alias="converterUsed")
+    created_at: datetime | None = Field(default=None, validation_alias="createdAt")
+    updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
 
 
 class JobCreateResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
-    jobId: str
+    job_id: str = Field(validation_alias="jobId")
     status: str = "PENDING"
     message: str = "Job queued successfully"
 
 
 class JobListResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     jobs: list[JobSchema]
     total: int
@@ -128,27 +141,31 @@ class BillingPurchaseRequest(BaseModel):
 
 
 class CreditLogSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
 
     id: str
     amount: int
     reason: str
-    jobId: str | None = None
-    createdAt: datetime | None = None
+    job_id: str | None = Field(default=None, validation_alias="jobId")
+    created_at: datetime | None = Field(default=None, validation_alias="createdAt")
 
 
 class BillingUsageResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     credits: int
-    totalJobs: int
-    jobsToday: int
-    successRate: float
-    dailyUsage: list[dict[str, Any]] = []
+    total_jobs: int = Field(validation_alias="totalJobs")
+    jobs_today: int = Field(validation_alias="jobsToday")
+    success_rate: float = Field(validation_alias="successRate")
+    daily_usage: list[dict[str, Any]] = Field(default=[], validation_alias="dailyUsage")
 
 
 class BillingTransactionsResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     logs: list[CreditLogSchema]
 
@@ -157,17 +174,21 @@ class BillingTransactionsResponse(BaseModel):
 
 
 class AdminUserSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel,
+    )
 
     id: str
     email: str
     credits: int
     role: str
-    createdAt: datetime | None = None
+    created_at: datetime | None = Field(default=None, validation_alias="createdAt")
 
 
 class AdminUserListResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     users: list[AdminUserSchema]
     total: int
@@ -176,30 +197,30 @@ class AdminUserListResponse(BaseModel):
 
 
 class AdminStatsResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
-    totalUsers: int
-    totalJobs: int
-    totalCredits: int
-    jobsByStatus: dict[str, int]
+    total_users: int = Field(validation_alias="totalUsers")
+    total_jobs: int = Field(validation_alias="totalJobs")
+    total_credits: int = Field(validation_alias="totalCredits")
+    jobs_by_status: dict[str, int] = Field(validation_alias="jobsByStatus")
 
 
 class AdminCreditUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     amount: int = Field(..., ge=-10000, le=10000)
-    reason: str = Field(default="manual_add")
+    reason: str = "manual_add"
 
 
 # ── Webhook update ─────────────────────────────────────────────────────────────
 
 
 class WebhookUpdateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
-    webhookUrl: str
+    webhook_url: str = Field(validation_alias="webhookUrl")
 
-    @field_validator("webhookUrl")
+    @field_validator("webhook_url")
     @classmethod
     def must_be_valid_url(cls, v: str) -> str:
         url_pattern = re.compile(
