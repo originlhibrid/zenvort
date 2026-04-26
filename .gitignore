@@ -1,14 +1,44 @@
+# Node
 node_modules/
 dist/
 build/
-*.log
+*.tsbuildinfo
+coverage/
+.nyc_output/
+
+# Environment
 .env
 .env.local
 .env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Logs
+*.log
+
+# Obsidian/graphify
+graphify/
+graphify-out/
+
+# Mockups and temp files
+zenvort_design_mockup.html
+temp_*.py
+temp_*.js
+temp_*.ts
+
+# Secrets
+*.pem
+*.key
+*.crt
+
+# OS
 .DS_Store
-*.tsbuildinfo
-coverage/
-.nyc_output/__pycache__/
-*.pyc
-db/alembic/versions/__pycache__/
-worker/__pycache__/
+*.swp
+*.swo
+
+# Editors
+.vscode/
+.idea/
