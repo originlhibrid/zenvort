@@ -51,8 +51,8 @@ async def signup(
     user = User(
         email=body.email,
         password=hash_password(body.password),
-        api_key=api_key_hash,  # store hash only — raw key returned at signup only
-        api_key_hash=api_key_hash,
+        api_key=api_key,          # raw key — returned on login so client can re-auth
+        api_key_hash=api_key_hash,  # hash — used for server-side auth lookup
         credits=100,
         role="user",
     )
