@@ -1,3 +1,4 @@
+import { BASE_URL } from '../lib/api.js';
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/lib/store'
@@ -21,7 +22,7 @@ export default function Signup() {
       if (password !== confirmPassword) throw new Error('Passwords do not match')
       if (password.length < 8) throw new Error('Password must be at least 8 characters')
 
-      const res = await fetch('http://localhost:3000/auth/signup', {
+      const res = await fetch(BASE_URL + '/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

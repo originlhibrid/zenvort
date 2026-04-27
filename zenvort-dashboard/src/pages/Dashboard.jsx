@@ -1,3 +1,4 @@
+import { BASE_URL } from '../lib/api.js';
 import AppLayout from '@/components/layout/AppLayout'
 import { Badge } from '@/components/ui/badge'
 import { useState, useEffect, useRef } from 'react'
@@ -97,7 +98,7 @@ export default function Dashboard() {
   // Fetch jobs from API
   const fetchJobs = async () => {
     try {
-      const res = await fetch('http://localhost:3000/jobs?page=1&limit=20', { headers: authHeader })
+      const res = await fetch(BASE_URL + '/jobs?page=1&limit=20', { headers: authHeader })
       const data = await res.json()
       if (res.ok) setJobs(data.jobs || [])
     } catch {
@@ -108,7 +109,7 @@ export default function Dashboard() {
   // Fetch usage stats
   const fetchUsage = async () => {
     try {
-      const res = await fetch('http://localhost:3000/billing/usage', { headers: authHeader })
+      const res = await fetch(BASE_URL + '/billing/usage', { headers: authHeader })
       const data = await res.json()
       if (res.ok) setUsage(data)
     } catch {
@@ -121,7 +122,7 @@ export default function Dashboard() {
   // Refresh credits from /user/me
   const refreshCredits = async () => {
     try {
-      const res = await fetch('http://localhost:3000/user/me', { headers: authHeader })
+      const res = await fetch(BASE_URL + '/user/me', { headers: authHeader })
       const data = await res.json()
       if (res.ok) {
         localStorage.setItem('zenvort_user', JSON.stringify(data))
@@ -167,7 +168,7 @@ export default function Dashboard() {
       const form = new FormData()
       form.append('file', file)
       form.append('outputFormat', outputFormat)
-      const res = await fetch('http://localhost:3000/jobs', {
+      const res = await fetch(BASE_URL + '/jobs', {
         method: 'POST',
         headers: { Authorization: `Bearer ${apiKey}` },
         body: form,

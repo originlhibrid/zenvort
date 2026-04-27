@@ -1,3 +1,4 @@
+import { BASE_URL } from '../lib/api.js';
 import AppLayout from '@/components/layout/AppLayout'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/store'
@@ -15,7 +16,7 @@ export default function Admin() {
   const authHeader = { Authorization: `Bearer ${apiKey}` }
 
   const fetchUsers = () => {
-    fetch('http://localhost:3000/admin/users?page=1', { headers: authHeader })
+    fetch(BASE_URL + '/admin/users?page=1', { headers: authHeader })
       .then(r => r.json())
       .then(data => { if (data.users) setUsers(data.users) })
       .catch(() => {})
@@ -23,7 +24,7 @@ export default function Admin() {
   }
 
   const fetchStats = () => {
-    fetch('http://localhost:3000/admin/stats', { headers: authHeader })
+    fetch(BASE_URL + '/admin/stats', { headers: authHeader })
       .then(r => r.json())
       .then(data => setStats(data))
       .catch(() => {})
@@ -45,7 +46,7 @@ export default function Admin() {
     if (isNaN(amount)) { setError('Enter a number'); return }
     setError('')
     try {
-      const res = await fetch(`http://localhost:3000/admin/users/${userId}/credits`, {
+      const res = await fetch(`${BASE_URL}/admin/users/${userId}/credits`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', ...authHeader },
         body: JSON.stringify({ amount }),

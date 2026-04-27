@@ -1,3 +1,4 @@
+import { BASE_URL } from '../lib/api.js';
 import AppLayout from '@/components/layout/AppLayout'
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/store'
@@ -17,7 +18,7 @@ export default function Billing() {
   const authHeader = { Authorization: `Bearer ${apiKey}` }
 
   useEffect(() => {
-    fetch('http://localhost:3000/billing/plans')
+    fetch(BASE_URL + '/billing/plans')
       .then(r => r.json())
       .then(data => { if (Array.isArray(data)) setPlans(data) })
       .catch(() => {})
