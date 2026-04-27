@@ -15,6 +15,7 @@ celery_app.conf.update(
     accept_content=["json"],
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    worker_prefetch_multiplier=1,
     worker_concurrency=settings.WORKER_CONCURRENCY,
     task_soft_time_limit=540,
     task_time_limit=600,

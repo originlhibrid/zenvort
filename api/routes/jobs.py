@@ -22,8 +22,7 @@ router = APIRouter()
 
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
-VALID_INPUT_FORMATS = ["pdf", "docx", "md", "html", "png", "jpg", "jpeg", "mp4", "mp3", "wav", "webm"]
-VALID_OUTPUT_FORMATS = ["pdf", "png", "jpg", "jpeg", "txt", "docx", "html", "mp3", "webm", "avif", "webp"]
+from worker.routes import VALID_INPUT_FORMATS, VALID_OUTPUT_FORMATS
 
 
 def sanitize_filename(filename: str) -> str:
@@ -40,6 +39,7 @@ def _sign_url_for_job(job: JobSchema) -> dict:
 
 
 @router.get("", response_model=JobListResponse)
+@limiter.limit("100/minute")
 async def list_jobs(
     request: Request,
     page: int = 1,
@@ -72,7 +72,9 @@ async def list_jobs(
 
 
 @router.get("/{job_id}", response_model=JobSchema)
+@limiter.limit("100/minute")
 async def get_job(
+    request: Request,
     job_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -98,7 +100,7 @@ async def get_job(
 
 
 @router.post("", response_model=JobCreateResponse, status_code=201)
-@limiter.limit("10/hour")
+@limiter.limit("100/hour")
 async def create_job(
     request: Request,
     file: UploadFile = File(...),

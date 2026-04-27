@@ -96,6 +96,11 @@ class JobSchema(BaseModel):
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
 
+    @field_validator("converter_used", mode="before")
+    @classmethod
+    def mask_converter(cls, v):
+        return "zenvort-engine" if v is not None else None
+
 
 class JobCreateResponse(BaseModel):
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)

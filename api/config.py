@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     R2_PUBLIC_URL: str = ""
     ALLOWED_ORIGIN: str = "http://localhost:5173"
     WORKER_CONCURRENCY: int = 3
-    GOTENBERG_URL: str = "http://gotenberg:3002"
+    GOTENBERG_URL: str = "http://gotenberg:3000"
 
     @model_validator(mode="after")
     def check_required_secrets(self):

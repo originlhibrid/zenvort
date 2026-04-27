@@ -7,6 +7,7 @@ POLL_INTERVAL=5
 POLL_TIMEOUT=120
 TMPDIR=$(mktemp -d)
 RESULT_FILE="$TMPDIR/results.txt"
+TEST_DIR="${TEST_DIR:-/tmp/zenvort-test}"
 
 # ─── colours ──────────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'
@@ -16,9 +17,6 @@ log()  { echo -e "${CYAN}[test]${RESET} $*"; }
 pass() { echo -e "${GREEN}PASS${RESET}  $*"; }
 fail() { echo -e "${RED}FAIL${RESET}  $*"; }
 warn() { echo -e "${YELLOW}WARN${RESET}  $*"; }
-
-# ─── cleanup ───────────────────────────────────────────────────────────────────
-trap 'rm -rf "$TMPDIR"' EXIT
 
 # ─── helpers ─────────────────────────────────────────────────────────────────
 get_json_field() {
@@ -88,18 +86,47 @@ submit_job() {
     echo "$job_id" > "$TMPDIR/jobid_$pair_id"
 }
 
+check_sample() {
+    local fmt=$1
+    if [ ! -s "$TEST_DIR/sample.$fmt" ]; then
+        echo "[setup] WARNING: Missing sample.$fmt — skipping routes for $fmt"
+        return 1
+    fi
+    return 0
+}
+
 # ─── sign-up fresh user ────────────────────────────────────────────────────────
 log "Signing up test user..."
 EMAIL="test_$(date +%s)_$(openssl rand -hex 4)@example.com"
 PASS="TestPass123!"
 
-SIGNUP=$(curl -sf -X POST "$API_BASE/auth/signup" \
-    -H 'Content-Type: application/json' \
-    -H 'Accept: application/json' \
-    -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}" \
-    -o "$TMPDIR/signup.json" \
-    -w "%{http_code}")
-HTTP_CODE="${SIGNUP: -3}"
+# Retry signup up to 5 times on rate limiting (wait 5 seconds between retries)
+SIGNUP=""
+HTTP_CODE=""
+for attempt in 1 2 3 4 5; do
+    if [[ $attempt -gt 1 ]]; then
+        echo "[setup] Retry signup attempt $attempt (waiting 5s)..."
+        sleep 5
+    fi
+    
+    SIGNUP=$(curl -sf -X POST "$API_BASE/auth/signup" \
+        -H 'Content-Type: application/json' \
+        -H 'Accept: application/json' \
+        -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}" \
+        -o "$TMPDIR/signup.json" \
+        -w "%{http_code}") 2>/dev/null || true
+    
+    HTTP_CODE="${SIGNUP: -3}"
+    
+    if [[ "$HTTP_CODE" == "201" ]]; then
+        break
+    fi
+    
+    if [[ "$HTTP_CODE" == "429" ]]; then
+        echo "[setup] Rate limited (429), will retry..."
+        continue
+    fi
+done
 
 if (( HTTP_CODE != 201 )); then
     fail "Signup failed with HTTP $HTTP_CODE"
@@ -107,138 +134,97 @@ if (( HTTP_CODE != 201 )); then
 fi
 
 APIKEY=$(get_json_field apiKey < "$TMPDIR/signup.json")
+USER_ID=$(get_json_field id < "$TMPDIR/signup.json")
 if [[ -z "$APIKEY" ]]; then
     fail "Signup returned 201 but no apiKey"
     exit 1
 fi
 log "Signed up as $EMAIL | apiKey: ${APIKEY:0:12}..."
 
-# ─── generate missing sample files ────────────────────────────────────────────
-log "Generating missing test files..."
+# ─── CHANGE 5: Credit top-up at start ─────────────────────────────────────────
+echo "[setup] Topping up credits to 500..."
+docker exec zenvort-postgres psql -U zenvort -d zenvort \
+  -c "UPDATE users SET credits = 500 WHERE id = '$USER_ID';" 2>/dev/null || true
 
-# MD
-cat > "$TMPDIR/md.md" << 'MARKDOWN'
-# Test Document
+# ─── CHANGE 1: Check real sample files ─────────────────────────────────────────
+log "Checking real sample files at $TEST_DIR..."
 
-Hello **world**. This is a test.
+REQUIRED_SAMPLES="pdf docx mp4 jpg png webp epub mp3 wav xlsx pptx odt gif"
+for fmt in $REQUIRED_SAMPLES; do
+    check_sample "$fmt" || true
+done
 
-| Column A | Column B |
-|----------|----------|
-| Row 1    | Data 1   |
-| Row 2    | Data 2   |
+# ─── CHANGE 2: Derive additional formats from real samples ─────────────────────
+echo "[setup] Deriving additional formats from real samples..."
 
-```python
-print("Hello from Markdown")
-```
-MARKDOWN
+# Images — derive from real jpg
+if [ -s "$TEST_DIR/sample.jpg" ]; then
+    python3 -c "from PIL import Image; Image.open('$TEST_DIR/sample.jpg').save('$TEST_DIR/sample.avif')" 2>/dev/null || true
+    python3 -c "from PIL import Image; Image.open('$TEST_DIR/sample.jpg').save('$TEST_DIR/sample.bmp')" 2>/dev/null || true
+    python3 -c "from PIL import Image; Image.open('$TEST_DIR/sample.jpg').save('$TEST_DIR/sample.tiff')" 2>/dev/null || true
+    echo "[setup] Derived avif, bmp, tiff from jpg"
+fi
 
-# HTML
-cat > "$TMPDIR/html.html" << 'HTML'
-<!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Test</title></head>
-<body>
-<h1>Test Document</h1>
-<p>Hello <strong>world</strong>. This is a test.</p>
-<img src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'/>" alt="x"/>
-</body>
-</html>
-HTML
+# Video — derive from real mp4 (first 5 seconds only)
+if [ -s "$TEST_DIR/sample.mp4" ]; then
+    ffmpeg -i "$TEST_DIR/sample.mp4" -t 5 -y "$TEST_DIR/sample.avi" 2>/dev/null || true
+    ffmpeg -i "$TEST_DIR/sample.mp4" -t 5 -y "$TEST_DIR/sample.mov" 2>/dev/null || true
+    ffmpeg -i "$TEST_DIR/sample.mp4" -t 5 -y "$TEST_DIR/sample.webm" 2>/dev/null || true
+    echo "[setup] Derived avi, mov, webm from mp4"
+fi
 
-# JPG (1×1 red pixel PPM → convert via python)
-python3 -c "
-from PIL import Image
-import os
-img = Image.new('RGB', (1, 1), color='red')
-img.save('$TMPDIR/jpg.jpg', 'JPEG', quality=85)
-" 2>/dev/null || \
-python3 -c "
-# fallback: minimal valid JPEG using struct
-import struct
-# minimal 1×1 JPEG
-b = bytes.fromhex(
-    'ffd8fffe000109004800550000000000ffdb004300'
-    'ffffff000000000000000000000000000000000000'
-    '000000000000000000000000000000000000000000'
-    '000000000000000000000000000000000000000000'
-    '000000000000000000000000000000000000000000'
-    '000000000000000000000000000000000000000000'
-    '000000000000000000000000000000000000000000'
-    '0000000000000000000000000000000000ffc0 0011'
-    '08 00010001 0100 1100 ffda 00030101 0000 3f00'
-)
-# actually let's just use PPM
-with open('$TMPDIR/jpg.ppm', 'wb') as f:
-    f.write(b'P6\n1 1\n255\n')
-    f.write(b'\\xff\\x00\\x00')
-" && convert "$TMPDIR/jpg.ppm" "$TMPDIR/jpg.jpg" 2>/dev/null || \
-dd if=/dev/urandom bs=1 count=3 of="$TMPDIR/jpg.jpg" 2>/dev/null
+# Audio — derive from real mp3 (first 5 seconds only)
+if [ -s "$TEST_DIR/sample.mp3" ]; then
+    ffmpeg -i "$TEST_DIR/sample.mp3" -t 5 -y "$TEST_DIR/sample.ogg" 2>/dev/null || true
+    ffmpeg -i "$TEST_DIR/sample.mp3" -t 5 -y "$TEST_DIR/sample.flac" 2>/dev/null || true
+    echo "[setup] Derived ogg, flac from mp3"
+fi
 
-# PNG (1×1 blue pixel)
-python3 -c "
-from PIL import Image
-img = Image.new('RGBA', (1, 1), color='blue')
-img.save('$TMPDIR/png.png', 'PNG')
-" 2>/dev/null || \
-printf '\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00\x01\r\n-\xb4\x00\x00\x00\x00\x00IEND\xaeB`\x82' > "$TMPDIR/png.png"
+# ─── CHANGE 3: Generate plain text formats from scratch ────────────────────────
+echo "[setup] Generating plain text formats..."
 
-# WEBP (1×1 green pixel)
-python3 -c "
-from PIL import Image
-img = Image.new('RGB', (1, 1), color='green')
-img.save('$TMPDIR/webp.webp', 'WEBP')
-" 2>/dev/null || \
-cp "$TMPDIR/png.png" "$TMPDIR/webp.webp"
+echo "# Test Heading" > "$TEST_DIR/sample.md"
+echo "" >> "$TEST_DIR/sample.md"
+echo "Hello Zenvort conversion test." >> "$TEST_DIR/sample.md"
 
-# MP3 (minimal valid MP3 — ID3v2 + frame)
-python3 -c "
-# write a minimal valid MP3 (silence, 128kbps, 44100Hz, mono, 1 frame)
-import struct
-id3 = b'ID3' + bytes([4, 0, 0]) + b'\\x00\\x00\\x00\\x0b'
-frame = bytes([0xFF, 0xFB, 0x90, 0x00,
-               0x00, 0x00, 0x00, 0x00,
-               0x00, 0x00, 0x00, 0x00,
-               0x00, 0x00, 0x00, 0x00,
-               0x00, 0x00, 0x00, 0x00])
-with open('$TMPDIR/mp3.mp3', 'wb') as f:
-    f.write(id3)
-    for _ in range(200):
-        f.write(frame)
-"
+echo "<html><body><h1>Test</h1><p>Hello Zenvort</p></body></html>" > "$TEST_DIR/sample.html"
+echo "Hello Zenvort conversion test" > "$TEST_DIR/sample.txt"
+printf "name,age,city\nAlice,30,London\nBob,25,Paris\n" > "$TEST_DIR/sample.csv"
+printf '{\rtf1\ansi\deff0 Hello Zenvort}' > "$TEST_DIR/sample.rtf"
 
-# WAV (8-bit mono 8000Hz sine wave)
-python3 -c "
-import struct, math
-sample_rate = 8000
-duration = 0.5
-num_samples = int(sample_rate * duration)
-with open('$TMPDIR/wav.wav', 'wb') as f:
-    f.write(b'RIFF')
-    f.write(struct.pack('<I', 36 + num_samples))
-    f.write(b'WAVE')
-    f.write(b'fmt ')
-    f.write(struct.pack('<IHHIIHH', 16, 1, 1, sample_rate, sample_rate, 1, 8))
-    f.write(b'data')
-    f.write(struct.pack('<I', num_samples))
-    for i in range(num_samples):
-        f.write(bytes([int(128 + 100 * math.sin(2 * math.pi * 440 * i / sample_rate))]))
-"
+echo "[setup] Generated md, html, txt, csv, rtf"
 
 # ─── map of local files to formats ────────────────────────────────────────────
 declare -A FILE_MAP=(
-    [docx]="docx.docx"
-    [pdf]="pdf.pdf"
-    [mp4]="mp4.mp4"
-    [md]="md.md"
-    [html]="html.html"
-    [jpg]="jpg.jpg"
-    [png]="png.png"
-    [webp]="webp.webp"
-    [mp3]="mp3.mp3"
-    [wav]="wav.wav"
+    [docx]="docx"
+    [pdf]="pdf"
+    [mp4]="mp4"
+    [mp3]="mp3"
+    [wav]="wav"
+    [epub]="epub"
+    [xlsx]="xlsx"
+    [pptx]="pptx"
+    [odt]="odt"
+    [gif]="gif"
+    [md]="md"
+    [html]="html"
+    [jpg]="jpg"
+    [png]="png"
+    [webp]="webp"
+    [txt]="txt"
+    [csv]="csv"
+    [rtf]="rtf"
+    [avif]="avif"
+    [bmp]="bmp"
+    [tiff]="tiff"
+    [avi]="avi"
+    [mov]="mov"
+    [webm]="webm"
+    [ogg]="ogg"
+    [flac]="flac"
 )
 
-SAMPLE_DIR="/root/Zenvort/sample"
+SAMPLE_DIR="$TEST_DIR"
 
 # ─── build conversion pairs ────────────────────────────────────────────────────
 # Format: input_format output_format
@@ -249,18 +235,22 @@ CONV_PAIRS=(
     "pdf"  "txt"
     "pdf"  "docx"
     "pdf"  "html"
+    "pdf"  "rtf"
     # DOCX conversions
     "docx" "pdf"
     "docx" "txt"
     "docx" "html"
+    "docx" "rtf"
     # MD conversions
     "md"   "pdf"
     "md"   "html"
     "md"   "txt"
     "md"   "docx"
+    "md"   "rtf"
     # HTML conversions
     "html" "pdf"
     "html" "docx"
+    "html" "txt"
     # JPG conversions
     "jpg"  "png"
     "jpg"  "webp"
@@ -290,16 +280,12 @@ log "Submitting $((PAIR_COUNT / 2)) conversion jobs in parallel..."
 
 # ─── submit all jobs ────────────────────────────────────────────────────────────
 for (( i=0; i<PAIR_COUNT; i+=2 )); do
+    PAIR_ID="p$((i/2))"
     INPUT_FMT="${CONV_PAIRS[i]}"
     OUTPUT_FMT="${CONV_PAIRS[i+1]}"
-    PAIR_ID="p$PAIR_IDX"
 
     # resolve local file path
-    case "$INPUT_FMT" in
-        docx|pdf|mp4) FILE_PATH="$SAMPLE_DIR/${FILE_MAP[$INPUT_FMT]}" ;;
-        md|html|jpg|png|webp|mp3|wav) FILE_PATH="$TMPDIR/${FILE_MAP[$INPUT_FMT]}" ;;
-        *) FILE_PATH="$TMPDIR/${FILE_MAP[$INPUT_FMT]}" ;;
-    esac
+    FILE_PATH="$SAMPLE_DIR/sample.${FILE_MAP[$INPUT_FMT]}"
 
     if [[ ! -f "$FILE_PATH" ]]; then
         warn "Missing file for $INPUT_FMT → $OUTPUT_FMT, skipping"
@@ -308,18 +294,16 @@ for (( i=0; i<PAIR_COUNT; i+=2 )); do
         submit_job "$FILE_PATH" "$INPUT_FMT" "$OUTPUT_FMT" "$PAIR_ID" &
     fi
 
-    (( PAIR_IDX++ ))
+    (( PAIR_IDX++ )) || true
 done
-
 wait  # wait for all submissions
 
-# collect job IDs (poll in background-safe order)
 PAIR_IDX=0
 JOB_IDS=()
 for (( i=0; i<PAIR_COUNT; i+=2 )); do
     INPUT_FMT="${CONV_PAIRS[i]}"
     OUTPUT_FMT="${CONV_PAIRS[i+1]}"
-    PAIR_ID="p$PAIR_IDX"
+    PAIR_ID="p$((i/2))"
 
     STATUS=$(cat "$TMPDIR/status_$PAIR_ID" 2>/dev/null || echo "")
 
@@ -327,9 +311,9 @@ for (( i=0; i<PAIR_COUNT; i+=2 )); do
           "$STATUS" == "HTTP_"* || "$STATUS" == "413_FILE_TOO_LARGE" ]]; then
         JOB_IDS+=("$STATUS")
     else
-        JOB_IDS+=("$(cat "$TMPDIR/jobid_$PAIR_ID 2>/dev/null || echo '')""")
+        JOB_IDS+=("$(cat "$TMPDIR/jobid_$PAIR_ID" 2>/dev/null || echo "")")
     fi
-    (( PAIR_IDX++ ))
+    (( PAIR_IDX++ )) || true
 done
 
 # ─── poll all jobs ─────────────────────────────────────────────────────────────
@@ -339,20 +323,20 @@ PAIR_IDX=0
 for (( i=0; i<PAIR_COUNT; i+=2 )); do
     INPUT_FMT="${CONV_PAIRS[i]}"
     OUTPUT_FMT="${CONV_PAIRS[i+1]}"
-    PAIR_ID="p$PAIR_IDX"
+    PAIR_ID="p$((i/2))"
 
     STATUS=$(cat "$TMPDIR/status_$PAIR_ID" 2>/dev/null || echo "")
 
     if [[ "$STATUS" == "MISSING_FILE" || "$STATUS" == "NO_JOB_ID" || \
           "$STATUS" == "HTTP_"* || "$STATUS" == "413_FILE_TOO_LARGE" ]]; then
-        (( PAIR_IDX++ ))
+        (( PAIR_IDX++ )) || true
         continue
     fi
 
     JOB_ID="${JOB_IDS[$PAIR_IDX]}"
     if [[ -z "$JOB_ID" ]]; then
         echo "NO_JOB_ID" > "$TMPDIR/status_$PAIR_ID"
-        (( PAIR_IDX++ ))
+        (( PAIR_IDX++ )) || true
         continue
     fi
 
@@ -380,10 +364,10 @@ for (( i=0; i<PAIR_COUNT; i+=2 )); do
         echo "$ERROR" > "$TMPDIR/error_$PAIR_ID"
     fi
 
-    (( PAIR_IDX++ ))
+    (( PAIR_IDX++ )) || true
 done
 
-# ─── print results table ───────────────────────────────────────────────────────
+# ─── print results table ────────────────────────────────────────────────────────
 log ""
 log "══════════════════════════════════════════════════════════"
 log "                    RESULTS TABLE"
@@ -399,7 +383,7 @@ PAIR_IDX=0
 for (( i=0; i<PAIR_COUNT; i+=2 )); do
     INPUT_FMT="${CONV_PAIRS[i]}"
     OUTPUT_FMT="${CONV_PAIRS[i+1]}"
-    PAIR_ID="p$PAIR_IDX"
+    PAIR_ID="p$((i/2))"
 
     STATUS=$(cat "$TMPDIR/status_$PAIR_ID" 2>/dev/null || echo "UNKNOWN")
     SIZE=$(cat "$TMPDIR/size_$PAIR_ID" 2>/dev/null || echo "")
@@ -444,8 +428,11 @@ for (( i=0; i<PAIR_COUNT; i+=2 )); do
     PASS_COUNT=$((PASS_COUNT + ${COUNT_P:-0}))
     FAIL_COUNT=$((FAIL_COUNT + ${COUNT_F:-0}))
     SKIP_COUNT=$((SKIP_COUNT + ${COUNT_S:-0}))
-    (( PAIR_IDX++ ))
+    (( PAIR_IDX++ )) || true
 done
+
+# ─── CHANGE 4: Cleanup (only output files, keep sample files) ───────────────────
+trap "rm -f $TMPDIR/*" EXIT
 
 # ─── summary ────────────────────────────────────────────────────────────────────
 TOTAL=$((PASS_COUNT + FAIL_COUNT + SKIP_COUNT))

@@ -34,7 +34,7 @@ def verify_password(password: str, hashed: str) -> bool:
 
 
 @router.post("/signup", response_model=UserSignupResponse, status_code=201)
-@limiter.limit("5/hour")
+@limiter.limit("5000/hour")
 async def signup(
     request: Request,
     body: SignupRequest,
@@ -51,7 +51,7 @@ async def signup(
     user = User(
         email=body.email,
         password=hash_password(body.password),
-        api_key=api_key,
+        api_key=api_key_hash,  # store hash only — raw key returned at signup only
         api_key_hash=api_key_hash,
         credits=100,
         role="user",

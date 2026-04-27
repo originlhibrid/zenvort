@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     R2_BUCKET_NAME: str = ""
     R2_PUBLIC_URL: str = ""
     WORKER_CONCURRENCY: int = 3
-    GOTENBERG_URL: str = "http://gotenberg:3002"
+    GOTENBERG_URL: str = "http://gotenberg:3000"
 
     @model_validator(mode="after")
     def check_required_secrets(self):

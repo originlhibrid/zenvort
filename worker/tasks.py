@@ -168,9 +168,7 @@ def process_job(self, job_id: str) -> dict:
                 job.updated_at = datetime.utcnow()
 
                 if user:
-                    if user.credits <= 0:
-                        logger.warning(f"[worker][{job_id}] User has no credits, skipping deduction")
-                    else:
+                    if user.credits >= 1:
                         user.credits -= 1
                         credit_log = CreditLog(
                             id=str(uuid.uuid4()),
@@ -181,6 +179,8 @@ def process_job(self, job_id: str) -> dict:
                             created_at=datetime.utcnow(),
                         )
                         db.add(credit_log)
+                    else:
+                        logger.warning(f"[worker][{job_id}] User {user_id} has no credits — skipping deduction")
 
                 db.commit()
         else:
