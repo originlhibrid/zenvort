@@ -2,10 +2,10 @@
 # ~150 routes — each is a single line.  The converter handles internal
 # library routing (e.g. documents.py picks pdf2docx vs pandoc vs gotenberg).
 
-from worker.converters import documents
-from worker.converters import images
-from worker.converters import media
-from worker.converters import ocr
+from worker.converters.documents import convert as documents
+from worker.converters.images   import convert as images
+from worker.converters.media   import convert as media
+from worker.converters.ocr     import convert as ocr
 
 ROUTES = {
     # ── Documents ────────────────────────────────────────────────────────

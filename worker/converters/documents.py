@@ -68,7 +68,12 @@ def convert(
         logger.info(f"[{input_format}→{output_format}] using pdf2docx")
         _pdf_to_docx(input_path, output_path)
 
-    # md/rtf input: use Pandoc
+    # md input → pdf: use Gotenberg (Pandoc needs pdflatex which isn't installed)
+    elif input_format == "md" and output_format == "pdf":
+        logger.info(f"[{input_format}→{output_format}] using gotenberg")
+        _gotenberg(input_path, output_path, input_format, output_format, timeout_s)
+
+    # md/rtf input (non-pdf output): use Pandoc
     elif input_format in PANDOC_FORMATS:
         logger.info(f"[{input_format}→{output_format}] using pandoc")
         _pandoc(input_path, output_path, input_format, output_format, timeout_s)
@@ -77,6 +82,11 @@ def convert(
     elif input_format == "docx" and output_format == "rtf":
         logger.info(f"[{input_format}→{output_format}] using pandoc")
         _pandoc(input_path, output_path, input_format, output_format, timeout_s)
+
+    # pdf→rtf: Gotenberg LibreOffice can't do pdf→rtf directly; via intermediate PDF→txt→rtf
+    elif input_format == "pdf" and output_format == "rtf":
+        logger.info(f"[{input_format}→{output_format}] using gotenberg via intermediate")
+        _gotenberg_pdf_to_rtf(input_path, output_path, timeout_s)
 
     # everything else: Gotenberg
     else:
@@ -189,6 +199,24 @@ def _gotenberg(
             f"{input_format}→{output_format}: {response.text[:500]}"
         )
 
+    # html→docx: Gotenberg returns PDF for HTML input, not DOCX.
+    # Detect the MIME type of Gotenberg's response and convert via pdf2docx.
+    if input_format == "html" and output_format == "docx":
+        os.makedirs(GOTENBERG_SHARED_DIR, exist_ok=True)
+        tmp_pdf = os.path.join(
+            GOTENBERG_SHARED_DIR,
+            f"got-tmp-{os.getpid()}-{time.time_ns()}.pdf",
+        )
+        try:
+            with open(tmp_pdf, "wb") as f:
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    f.write(chunk)
+            _gotenberg_pdf_to_docx(tmp_pdf, output_path, timeout_s)
+        finally:
+            if os.path.exists(tmp_pdf):
+                os.unlink(tmp_pdf)
+        return
+
     # Handle output
     if input_format == "pdf" and output_format == "docx":
         # Gotenberg returns PDF for PDF input; convert via pdftotext + docx.
@@ -229,6 +257,8 @@ def _gotenberg(
                 _gotenberg_pdf_to_csv(tmp_pdf, output_path, timeout_s)
             elif output_format == "html":
                 _gotenberg_pdf_to_html(tmp_pdf, output_path, timeout_s)
+            elif output_format == "rtf":
+                _gotenberg_pdf_to_rtf(tmp_pdf, output_path, timeout_s)
             else:
                 raise ValueError(f"Unsupported output format: {output_format}")
         finally:
@@ -354,6 +384,44 @@ def _gotenberg_pdf_to_html(
             + "\n</body></html>"
         )
         Path(output_path).write_text(html, encoding="utf-8")
+
+
+def _gotenberg_pdf_to_rtf(
+    pdf_path: str,
+    output_path: str,
+    timeout_s: float,
+) -> None:
+    """Convert PDF to RTF via pdftotext + pandoc."""
+    # Extract plain text from PDF
+    result = subprocess.run(
+        ["pdftotext", "-layout", pdf_path, "-"],
+        capture_output=True,
+        timeout=timeout_s,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"pdftotext failed for {pdf_path}")
+
+    text_bytes = result.stdout
+    if isinstance(text_bytes, bytes):
+        text_str = text_bytes.decode("utf-8", errors="replace")
+    else:
+        text_str = text_bytes
+
+    # Write text to temp file, convert to RTF via pandoc
+    tmp_txt = pdf_path + ".tmp.txt"
+    Path(tmp_txt).write_text(text_str, encoding="utf-8")
+    try:
+        result2 = subprocess.run(
+            ["pandoc", tmp_txt, "-o", output_path, "-t", "rtf", "--standalone"],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+        if result2.returncode != 0:
+            raise RuntimeError(f"pandoc txt→rtf failed: {result2.stderr[-300:]}")
+    finally:
+        if os.path.exists(tmp_txt):
+            os.unlink(tmp_txt)
 
 
 def _gotenberg_pdf_to_docx(

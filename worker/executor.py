@@ -35,7 +35,13 @@ def execute_conversion(
     attempts: list[AttemptResult] = []
 
     for converter_fn in converters:
-        converter_name = converter_fn.__module__ + "." + converter_fn.__name__
+        # Handle both functions (old style) and modules (new 4-file style).
+        # Modules have __spec__.name but no __module__; functions have both.
+        spec = getattr(converter_fn, "__spec__", None)
+        if spec is not None:
+            converter_name = spec.name + "." + converter_fn.__name__
+        else:
+            converter_name = converter_fn.__module__ + "." + converter_fn.__name__
 
         if os.path.exists(output_path):
             os.unlink(output_path)
