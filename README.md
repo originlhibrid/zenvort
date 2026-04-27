@@ -1,6 +1,6 @@
 # Zenvort
 
-A CloudConvert-style file conversion SaaS. Accept file uploads via REST API, convert them using FFmpeg, Gotenberg, Pillow, Tesseract, and more, store results on Cloudflare R2, and return a download URL. Jobs are processed asynchronously via Celery + Redis.
+A CloudConvert-style file conversion SaaS. Accept file uploads via REST API, convert them using FFmpeg, Gotenberg, Pillow, PyMuPDF, Tesseract and more, store results on Cloudflare R2, and return a download URL. Jobs are processed asynchronously via **Celery + Redis**. Files are auto-deleted 15 minutes after conversion.
 
 ---
 
@@ -11,11 +11,11 @@ A CloudConvert-style file conversion SaaS. Accept file uploads via REST API, con
                     │   Browser /     │
                     │   Client App    │
                     └────────┬────────┘
-                             │ HTTP
+                             │ HTTPS
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                 api (FastAPI, :3000)                        │
-│  /auth /jobs /user /billing /admin                          │
+│  /auth  /jobs  /user  /billing  /admin                     │
 │  SQLAlchemy (async) ──▶ PostgreSQL                         │
 │  Celery task dispatch ──▶ Redis                            │
 └───────────────────────────────┬─────────────────────────────┘
@@ -24,9 +24,10 @@ A CloudConvert-style file conversion SaaS. Accept file uploads via REST API, con
               ▼                                   ▼
 ┌─────────────────────────┐        ┌─────────────────────────┐
 │  worker (Celery, Redis) │        │    Cloudflare R2         │
-│  - FFmpeg (video/audio)│        │    inputs/{jobId}/       │
-│  - Gotenberg (docs)    │        │    outputs/{jobId}/      │
-│  - Pillow (images)     │        └─────────────────────────┘
+│  - FFmpeg (video/audio) │        │    inputs/{jobId}/       │
+│  - Gotenberg (LibreOffice)  │    │    outputs/{jobId}/     │
+│  - Pillow (images)      │        │    Auto-deleted 15 min   │
+│  - PyMuPDF (PDF→image) │        └─────────────────────────┘
 │  - Tesseract (OCR)     │
 │  - Calibre, Pandoc     │
 └─────────────────────────┘
@@ -43,7 +44,7 @@ A CloudConvert-style file conversion SaaS. Accept file uploads via REST API, con
 
 ## Tech Stack
 
-Python 3.12, FastAPI, SQLAlchemy (async), Alembic, PostgreSQL, Celery, Redis, Gotenberg (LibreOffice), FFmpeg, Pillow, Tesseract, Calibre, Pandoc, Cloudflare R2, Docker, bcrypt, slowapi (rate limiting)
+Python 3.12 · FastAPI · SQLAlchemy (async) · Alembic · PostgreSQL · Celery · Redis · Gotenberg (LibreOffice) · FFmpeg · Pillow · PyMuPDF · Tesseract · Calibre · Pandoc · CairoSVG · pdf2docx · img2pdf · Cloudflare R2 · Docker · bcrypt · slowapi (rate limiting)
 
 ---
 
@@ -51,8 +52,8 @@ Python 3.12, FastAPI, SQLAlchemy (async), Alembic, PostgreSQL, Celery, Redis, Go
 
 | Variable | Required | Default | Purpose |
 |----------|----------|---------|---------|
-| `DATABASE_URL` | Yes | — | PostgreSQL async connection (postgresql+asyncpg://...) |
-| `DATABASE_URL_SYNC` | Yes | — | PostgreSQL sync connection (postgresql://...) |
+| `DATABASE_URL` | Yes | — | PostgreSQL async connection (`postgresql+asyncpg://...`) |
+| `DATABASE_URL_SYNC` | Yes | — | PostgreSQL sync connection (`postgresql://...`) |
 | `REDIS_URL` | Yes | `redis://redis:6379/0` | Redis for Celery broker/result backend |
 | `PORT` | No | `3000` | API server port |
 | `R2_ACCOUNT_ID` | Yes | — | Cloudflare R2 account ID |
@@ -81,12 +82,12 @@ cp .env.example .env
 
 ### 3. Start Services
 ```bash
-docker-compose up --build
+docker compose up --build
 ```
 
 ### 4. Run Migrations
 ```bash
-docker-compose run --rm migrate
+docker compose run --rm migrate alembic --config /app/db/alembic.ini upgrade head
 ```
 
 ### 5. Create an Account
@@ -118,18 +119,18 @@ curl http://localhost:3000/jobs/JOB_ID \
 
 ## Database Schema
 
-**File:** `db/alembic/versions/` (Alembic migrations)
+**Migrations:** `db/alembic/versions/`
 
 ```python
 class User:
-    id           # cuuid primary key
-    email        # unique
-    password     # bcrypt hash (nullable for API-key-only auth)
-    api_key      # raw API key (returned only at signup/login)
-    api_key_hash # SHA256 hash for lookup
-    credits      # default 100
-    role         # "user" or "admin"
-    webhook_url  # optional webhook for job status notifications
+    id             # cuuid primary key
+    email          # unique
+    password       # bcrypt hash
+    api_key        # raw API key (returned only at signup/login)
+    api_key_hash   # SHA256 hash for lookup
+    credits        # default 100
+    role           # "user" or "admin"
+    webhook_url    # optional job status webhook
     created_at
 
 class CreditLog:
@@ -144,12 +145,12 @@ class Job:
     id              # cuuid primary key
     user_id         # FK to User (nullable)
     status          # PENDING | PROCESSING | DONE | FAILED
-    input_url       # R2 storage key
-    output_url      # R2 storage key (set on completion)
+    input_url       # R2 storage key (deleted immediately after conversion)
+    output_url      # R2 storage key (deleted 15 min after DONE)
     input_format    # e.g. "pdf"
     output_format   # e.g. "docx"
-    error           # error message (set on failure)
-    converter_used  # which converter succeeded
+    error           # sanitized error message (set on failure)
+    converter_used  # masked as "zenvort-engine" in API response
     created_at
     updated_at
 ```
@@ -202,6 +203,8 @@ class Job:
   2. Upload to R2 at `inputs/{jobId}/{filename}`
   3. Create Job in DB (status: PENDING)
   4. Dispatch Celery task `worker.tasks.process_job`
+  5. Delete input from R2 immediately after conversion
+  6. Schedule output deletion in 15 minutes
 - **Response (201):** `{ "jobId": "...", "status": "PENDING", "message": "Job queued successfully" }`
 
 ---
@@ -225,21 +228,23 @@ class Job:
 ### `GET /jobs/:id`
 - **Auth:** `Authorization: Bearer <apiKey>`
 - **Rate Limit:** 100/min
-- **Response:** Full job object with signed download URLs
+- **Response:** Full job object with signed download URLs (valid 14 minutes)
 ```json
 {
   "id": "...",
   "status": "DONE",
-  "inputUrl": "...",
-  "outputUrl": "...",
+  "inputUrl": null,
+  "outputUrl": "https://...",
   "inputFormat": "pdf",
   "outputFormat": "docx",
   "error": null,
   "converterUsed": "zenvort-engine",
   "createdAt": "...",
-  "updatedAt": "..."
+  "updatedAt": "...",
+  "expiresAt": "2026-04-27T04:00:00+00:00"
 }
 ```
+> **Note:** `outputUrl` is `null` once the 15-minute window expires. `expiresAt` is 15 minutes after `updatedAt`.
 
 ---
 
@@ -254,28 +259,6 @@ class Job:
 - **Body:** `{ "webhookUrl": "https://..." }`
 - **Security:** Resolves hostname and rejects private/reserved IPs
 - **Response:** `{ "ok": true, "webhookUrl": "..." }`
-
----
-
-### `GET /billing/plans`
-- **Auth:** None
-- **Response:**
-```json
-[
-  { "pack": "starter", "credits": 500, "amount": 199, "currency": "INR", "name": "Starter Pack" },
-  { "pack": "pro", "credits": 2000, "amount": 599, "currency": "INR", "name": "Pro Pack" },
-  { "pack": "enterprise", "credits": 10000, "amount": 1999, "currency": "INR", "name": "Enterprise Pack" }
-]
-```
-
----
-
-### `POST /billing/purchase`
-- **Auth:** `Authorization: Bearer <apiKey>`
-- **Rate Limit:** 5/min
-- **Body:** `{ "pack": "starter" | "pro" | "enterprise" }`
-- **Status:** Stub — returns `"Payment integration coming soon"`
-- **Response:** `{ "ok": true, "message": "Payment integration coming soon" }`
 
 ---
 
@@ -319,24 +302,66 @@ class Job:
 
 ---
 
-## Conversion Routes (145 total)
+## Conversion Routes — 156 total
 
-### Document → Document / PDF / Image
-Supported via **Gotenberg** (LibreOffice): PDF, DOCX, MD, HTML, XLSX, PPTX, ODT, ODS, ODP, RTF, CSV, TXT
+### Documents (28 input formats → multiple outputs)
 
-### Image → Image / PDF
-Supported via **Pillow**: JPG, PNG, WebP, AVIF, BMP, TIFF, GIF ↔ each other + PDF
+| Input | Outputs | Library |
+|-------|---------|---------|
+| PDF | PNG, JPG, TXT, DOCX, HTML, RTF | Gotenberg + PyMuPDF + pdf2docx |
+| DOCX | PDF, TXT, HTML, RTF | Gotenberg + Pandoc |
+| MD | PDF, HTML, TXT, DOCX, RTF | Gotenberg + Pandoc |
+| HTML | PDF, DOCX, TXT | Gotenberg |
+| XLSX | PDF, HTML, CSV, TXT, DOCX | Gotenberg |
+| PPTX | PDF, HTML, TXT, DOCX | Gotenberg |
+| ODT | PDF, TXT, HTML, DOCX | Gotenberg |
+| ODS | PDF, HTML, TXT | Gotenberg |
+| ODP | PDF | Gotenberg |
+| RTF | TXT, HTML, DOCX, PDF | Pandoc + Gotenberg |
+| CSV | PDF, HTML, TXT, DOCX | Gotenberg |
+| TXT | PDF, HTML, DOCX, RTF | Gotenberg |
 
-### Video / Audio
-Supported via **FFmpeg**: MP4, WebM, AVI, MOV, MP3, WAV, OGG, FLAC ↔ each other + GIF
+### Images (8 input formats → 8 outputs + PDF)
 
-### OCR (Image → TXT)
-Supported via **Tesseract**: JPG, PNG, WebP, BMP, TIFF, GIF, AVIF → TXT
+| Input | Outputs | Library |
+|-------|---------|---------|
+| JPG, PNG, WebP, AVIF, BMP, TIFF, GIF | ↔ each other | Pillow |
+| JPG, PNG, TIFF, BMP | PDF | img2pdf (lossless) |
+| Other raster | PDF | Pillow → img2pdf |
+| SVG | PNG, PDF | CairoSVG |
 
-### Document Conversion
-- **RTF** → TXT/HTML/DOCX/PDF via **Pandoc**
-- **EPUB** → various via **Calibre**
-- **MD** ↔ DOCX/HTML/PDF via **Gotenberg**
+### Media (video/audio)
+
+| Input | Outputs | Library |
+|-------|---------|---------|
+| MP4 | MP3, WebM, AVI, MOV, GIF, OGG, FLAC, WAV | FFmpeg |
+| MP3 | WAV, OGG, FLAC, MP4, WebM | FFmpeg |
+| WAV | MP3, OGG, FLAC, MP4, WebM | FFmpeg |
+| WebM | MP4, MP3, AVI, MOV, OGG, FLAC, WAV | FFmpeg |
+| AVI | MP4, MP3, WebM, MOV, OGG, FLAC, WAV, GIF | FFmpeg |
+| MOV | MP4, MP3, WebM, AVI, OGG, FLAC, WAV, GIF | FFmpeg |
+| OGG | MP3, WAV, FLAC, MP4, WebM | FFmpeg |
+| FLAC | MP3, WAV, OGG, MP4, WebM | FFmpeg |
+
+### OCR (images → text)
+
+| Input | Output | Library |
+|-------|--------|---------|
+| JPG, PNG, WebP, BMP, TIFF, GIF, AVIF | TXT | Tesseract |
+
+---
+
+## File Retention
+
+Files are automatically deleted to protect user privacy:
+
+| File | Deletion |
+|------|----------|
+| **Input file** | Immediately after conversion (success or failure) |
+| **Output file** | 15 minutes after job is marked DONE |
+| **Presigned URL** | 14 minutes (expires before file deletion) |
+
+A safety-net cleanup script (`worker/scripts/clear_stale_jobs.py`) runs as a cron fallback to delete any orphaned output files older than 20 minutes.
 
 ---
 
@@ -344,30 +369,27 @@ Supported via **Tesseract**: JPG, PNG, WebP, BMP, TIFF, GIF, AVIF → TXT
 
 **File:** `worker/tasks.py`
 
-**Celery task:** `process_job(job_id)`
+**Celery task:** `process_job(job_id)` — runs in the worker container
 
 **Process:**
 1. Update job status to `PROCESSING`
-2. Download input from R2 to `/tmp/zenvort/{jobId}-input.{inputFormat}`
-3. Route to appropriate converter (FFmpeg / Gotenberg / Pillow / Tesseract / Calibre / Pandoc)
-4. Validate output MIME type matches expected format
-5. Upload output to R2 at `outputs/{jobId}/output.{outputFormat}`
-6. Update job to `DONE`, set `outputUrl`, deduct 1 credit, log to CreditLog
-7. Send webhook (fire-and-forget, if configured)
-8. Cleanup temp files
+2. Download input from R2 to `/tmp/zenvort/{jobId}-input.{ext}`
+3. Route to appropriate converter based on `worker/routes.py`
+4. Validate output MIME type via `python-magic`
+5. Upload output to R2 at `outputs/{jobId}/output.{ext}`
+6. Update job to `DONE`, deduct 1 credit, log to CreditLog
+7. Delete input from R2 immediately
+8. Schedule output deletion in 15 minutes via Celery `apply_async`
+9. Send webhook (fire-and-forget, if configured)
+10. Cleanup temp files
 
-**Retry policy:** 3 attempts with 30s exponential backoff
+**Converters:** `worker/converters/`
+- `documents.py` — Gotenberg + Pandoc + pdf2docx
+- `images.py` — Pillow + PyMuPDF + img2pdf + CairoSVG
+- `media.py` — FFmpeg
+- `ocr.py` — Tesseract
 
-**Webhook payload (on DONE/FAILED):**
-```json
-{
-  "jobId": "...",
-  "status": "DONE" | "FAILED",
-  "outputUrl": "https://...",
-  "error": "..." | null,
-  "timestamp": "..."
-}
-```
+**Retry policy:** 3 attempts with 30s backoff. Error messages are sanitized — no internal library names or file paths are exposed to users.
 
 ---
 
@@ -377,10 +399,12 @@ Supported via **Tesseract**: JPG, PNG, WebP, BMP, TIFF, GIF, AVIF → TXT
 |---------|---------------|
 | **API Key Auth** | SHA256 hash lookup in DB, bcrypt for password |
 | **Webhook SSRF** | Resolves hostname, rejects private/reserved IPs |
-| **Path Traversal** | Temp files sandboxed to `/tmp/zenvort` |
+| **Path Traversal** | Temp files sandboxed to `/tmp/zenvort`, verified with `realpath` |
 | **MIME Validation** | `python-magic` verifies output file matches expected type |
 | **Credit Floor** | DB-level `CHECK (credits >= 0)` constraint |
 | **Double Deduction** | Unique partial index on `credit_logs(job_id)` where reason='conversion' |
+| **Error Sanitisation** | Internal library names, file paths, stack traces stripped before DB write |
+| **File Retention** | Auto-delete inputs immediately, outputs after 15 minutes |
 | **Rate Limiting** | 100 job submits/hr, 100 reads/min, 5 logins/15min, 5000 signups/hr |
 
 ---
@@ -390,50 +414,55 @@ Supported via **Tesseract**: JPG, PNG, WebP, BMP, TIFF, GIF, AVIF → TXT
 ```
 zenvort/
 ├── api/
-│   ├── main.py              # FastAPI app entry, CORS, routers
-│   ├── config.py            # Settings (pydantic)
+│   ├── main.py              # FastAPI app, CORS, routers
+│   ├── config.py            # Pydantic settings
 │   ├── database.py          # Async SQLAlchemy engine + session
-│   ├── models.py            # User, Job, CreditLog SQLAlchemy models
-│   ├── schemas.py           # Pydantic request/response schemas
-│   ├── deps.py              # get_current_user, get_admin_user
-│   ├── storage.py           # R2 upload/download/delete/signed URL
-│   ├── celery_client.py     # Celery app client (for dispatching tasks)
+│   ├── models.py             # User, Job, CreditLog SQLAlchemy models
+│   ├── schemas.py            # Pydantic request/response schemas
+│   ├── deps.py               # get_current_user, get_admin_user
+│   ├── storage.py            # R2 upload/download/delete/signed URL
+│   ├── celery_client.py      # Celery app client (task dispatch)
 │   ├── requirements.txt
-│   ├── Dockerfile           # FastAPI image
+│   ├── Dockerfile
 │   └── routes/
-│       ├── auth.py          # POST /auth/signup, /auth/login
-│       ├── jobs.py          # POST/GET /jobs, GET /jobs/:id
-│       ├── user.py          # GET /user/me, PATCH /user/webhook
-│       ├── billing.py       # GET /billing/plans, POST/GET /billing/*
-│       └── admin.py         # GET /admin/users, /admin/stats, PATCH credits
+│       ├── auth.py           # POST /auth/signup, /auth/login
+│       ├── jobs.py           # POST/GET /jobs, GET /jobs/:id
+│       ├── user.py           # GET /user/me, PATCH /user/webhook
+│       ├── billing.py         # GET /billing/usage, /billing/transactions
+│       └── admin.py          # Admin routes
 ├── worker/
-│   ├── celery_app.py        # Celery app definition
-│   ├── tasks.py             # process_job Celery task
-│   ├── executor.py          # Routes conversion to correct converter
-│   ├── routes.py            # 145 conversion routes + format lists
-│   ├── storage.py           # R2 download/upload helpers
-│   ├── config.py            # Worker settings
+│   ├── celery_app.py         # Celery app definition
+│   ├── tasks.py              # process_job + delete_output_file tasks
+│   ├── executor.py           # Routes conversion to correct converter
+│   ├── routes.py             # 156 conversion routes
+│   ├── storage.py            # R2 download/upload helpers
+│   ├── config.py             # Worker settings
+│   ├── utils.py              # Error sanitisation
 │   ├── requirements.txt
-│   ├── Dockerfile           # Worker image (includes ffmpeg, tesseract, etc.)
+│   ├── Dockerfile
 │   ├── converters/
-│   │   ├── gotenberg.py     # LibreOffice via Gotenberg
-│   │   ├── ffmpeg.py        # FFmpeg wrappers
-│   │   ├── pillow.py        # Pillow image processing
-│   │   ├── tesseract.py     # Tesseract OCR
-│   │   ├── calibre.py       # Calibre e-book conversion
-│   │   └── pandoc.py        # Pandoc document conversion
+│   │   ├── documents.py      # Gotenberg + Pandoc + pdf2docx
+│   │   ├── images.py         # Pillow + PyMuPDF + img2pdf + CairoSVG
+│   │   ├── media.py          # FFmpeg
+│   │   ├── ocr.py            # Tesseract
+│   │   └── calibre.py        # Calibre e-book conversion
+│   ├── scripts/
+│   │   └── clear_stale_jobs.py  # Safety-net cron cleanup
 │   └── security/
-│       ├── path_guard.py    # Path traversal prevention
-│       └── mime_guard.py    # MIME type validation
+│       ├── path_guard.py     # Path traversal prevention
+│       └── mime_guard.py     # MIME type validation
 ├── db/
 │   └── alembic/
 │       ├── env.py
 │       └── versions/
 │           ├── 001_initial.py
 │           ├── 002_strip_r2_urls.py
-│           └── 003_credit_floor.py
+│           ├── 003_credit_floor.py
+│           └── 004_fix_api_key_raw.py
+├── zenvort-dashboard/          # React frontend
 ├── docker-compose.yml
 ├── docker-compose.prod.yml
+├── deploy.sh
 ├── .env.example
 └── .env
 ```
@@ -444,32 +473,25 @@ zenvort/
 
 ```
 ✅ Phase 1 — Working Core (FastAPI + Celery)
-✅ Phase 2 — 145 Conversion Routes
+✅ Phase 2 — 156 Conversion Routes
 ✅ Phase 3 — Security Hardening (SSRF, MIME, credit floor, API key hashing)
+✅ Phase 4 — SaaS Web Dashboard (landing, signup, login, dashboard)
+✅ Phase 5 — File Retention (15-min auto-delete, expiry countdown)
 
-🔜 Phase 4 — SaaS Web Dashboard
-   [ ] Landing page with pricing
-   [ ] User signup / login
-   [ ] Dashboard with job upload + history
-   [ ] API key management UI
-   [ ] Credit balance display
-   [ ] Admin panel
-
-🔜 Phase 5 — Growth & Monetisation
+🔜 Phase 6 — Growth & Monetisation
    [ ] Live Razorpay integration for billing/purchase
-   [ ] Email notifications
    [ ] Referral system
-   [ ] Swagger / OpenAPI docs
+   [ ] Email notifications
+   [ ] API docs / Swagger
 
-🔜 Phase 6 — Enterprise & Scale
+🔜 Phase 7 — Enterprise & Scale
    [ ] Team accounts
    [ ] White-label option
    [ ] Priority queue
    [ ] Status page
 
-🔜 Phase 7 — AI Features
-   [ ] Whisper transcription
-   [ ] Tesseract OCR (already available!)
+🔜 Phase 8 — Advanced AI
    [ ] Batch jobs API
    [ ] Workflow builder
+   [ ] Custom output quality settings
 ```
