@@ -8,7 +8,7 @@ const plans = [
     name: 'Starter',
     price: '₹199',
     credits: '500',
-    features: ['500 conversions', 'All 38 formats', 'Webhook support', 'REST API access'],
+    features: ['500 conversions', '28 input formats', 'Webhook support', 'REST API access'],
     cta: 'Get started',
     highlight: false,
   },
@@ -16,7 +16,7 @@ const plans = [
     name: 'Pro',
     price: '₹599',
     credits: '2,000',
-    features: ['2000 conversions', 'All 38 formats', 'Webhook support', 'REST API access'],
+    features: ['2000 conversions', '28 input formats', 'Webhook support', 'REST API access'],
     cta: 'Get started',
     highlight: true,
   },
@@ -24,7 +24,7 @@ const plans = [
     name: 'Enterprise',
     price: '₹1,999',
     credits: '10,000',
-    features: ['10000 conversions', 'All 38 formats', 'Webhook support', 'REST API access'],
+    features: ['10000 conversions', '28 input formats', 'Webhook support', 'REST API access'],
     cta: 'Get started',
     highlight: false,
   },
@@ -100,9 +100,9 @@ export default function Landing() {
       {/* ── Hero ── */}
       <section className="px-6 py-12 text-center bg-white dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
         {/* Beta badge */}
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-indigo-300 dark:border-indigo-500 bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-sm font-medium mb-5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-          Beta — 100 free credits on signup
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-sm text-primary mb-5">
+          <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
+          Beta — 100 free credits · No card needed · Launch pricing coming soon
         </div>
 
         {/* Heading */}
@@ -113,7 +113,7 @@ export default function Landing() {
 
         {/* Subtext */}
         <p className="text-[14px] text-slate-600 dark:text-slate-300 max-w-[420px] mx-auto mb-7 leading-relaxed">
-          38 formats — video, audio, images, documents. Powered by FFmpeg and LibreOffice. Store on Cloudflare R2.
+          28 formats — video, audio, images, documents. Powered by FFmpeg, LibreOffice, PyMuPDF and Pillow. Store on Cloudflare R2.
         </p>
 
         {/* CTAs */}
@@ -138,10 +138,10 @@ export default function Landing() {
       {/* ── Social proof bar ── */}
       <section className="grid grid-cols-4 bg-slate-50 dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
         {[
-          { value: '38', label: 'Formats supported' },
-          { value: 'FFmpeg', label: 'Video & audio engine' },
-          { value: 'R2', label: 'Cloudflare storage' },
-          { value: 'BullMQ', label: 'Async job queue' },
+          { value: '28',     label: 'Input formats' },
+          { value: '156',    label: 'Conversion routes' },
+          { value: '~10s',   label: 'Avg conversion time' },
+          { value: '100%',   label: 'Secure — files auto-deleted' },
         ].map((item, i) => (
           <div
             key={i}
@@ -155,54 +155,28 @@ export default function Landing() {
         ))}
       </section>
 
-      {/* ── Pricing cards ── */}
-      <section className="px-6 py-6 bg-slate-50 dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
-        <div className="grid grid-cols-3 gap-3 max-w-[700px] mx-auto">
-          {plans.map((plan) => (
-            <div
-              key={plan.name}
-              className={cn(
-                'rounded-[10px] p-5 transition-colors duration-200 hover:border-indigo-400 dark:hover:border-indigo-500',
-                plan.highlight
-                  ? 'border-2 border-indigo-600 dark:border-indigo-400'
-                  : 'border-2 border-slate-900 dark:border-slate-600'
-              )}
-              style={{ position: 'relative' }}
-            >
-              {plan.highlight && (
-                <div className="absolute -top-[10px] left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] px-2.5 py-0.5 rounded-[10px] whitespace-nowrap font-medium z-10">
-                  Most popular
-                </div>
-              )}
-              {/* Plan name */}
-              <div className="text-[13px] font-semibold text-slate-900 dark:text-white mb-1">{plan.name}</div>
-              {/* Price */}
-              <div className="text-3xl font-bold text-slate-900 dark:text-white mb-0.5">{plan.price}</div>
-              {/* Credits */}
-              <div className="text-sm font-semibold text-amber-600 dark:text-amber-400 mb-4">{plan.credits} credits</div>
-              {/* Feature list */}
-              <ul className="space-y-1">
-                {plan.features.map(f => (
-                  <li key={f} className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
-                    <span className="text-emerald-600 dark:text-emerald-400 leading-none">✓</span>
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              {/* CTA */}
-              <div
-                className={cn(
-                  'mt-4 px-2 py-2 rounded-[6px] text-[12px] text-center cursor-pointer transition-colors',
-                  plan.highlight
-                    ? 'bg-indigo-500 text-white hover:bg-indigo-600'
-                    : 'border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-                )}
-                onClick={() => navigate('/signup')}
-              >
-                {plan.cta}
-              </div>
-            </div>
-          ))}
+      {/* ── Beta pricing section ── */}
+      <section className="px-6 py-16 bg-slate-50 dark:bg-slate-900 border-y border-slate-200 dark:border-slate-700">
+        <div className="text-center">
+          <div className="inline-flex items-center gap-2 rounded-full border border-green-500/30 bg-green-500/10 px-4 py-2 text-sm text-green-400 mb-6">
+            <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
+            Free during beta
+          </div>
+          <h2 className="text-3xl font-bold text-slate-900 dark:text-white mb-3">
+            Free while we're in beta
+          </h2>
+          <p className="text-muted-foreground max-w-md mx-auto mb-8">
+            Sign up now and get 100 free credits. No credit card required.
+            Pricing will be introduced when we launch publicly.
+          </p>
+          <a href="/signup">
+            <button className="px-8 py-3 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 transition">
+              Get started free →
+            </button>
+          </a>
+          <p className="text-xs text-muted-foreground mt-4">
+            Already have an account? <a href="/login" className="underline">Sign in</a>
+          </p>
         </div>
       </section>
 

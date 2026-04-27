@@ -241,35 +241,96 @@ export default function Dashboard() {
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
-  // Derive stat values from real data
-  const totalJobs = usage?.totalJobs ?? 0
-  const jobsToday = usage?.jobsToday ?? 0
-  const successRate = usage?.successRate ?? 0
-  const credits = usage?.credits ?? 0
+  function formatTimeLeft(expiresAt) {
+    if (!expiresAt) return null
+    const diff = new Date(expiresAt) - new Date()
+    if (diff <= 0) return 'expired'
+    const mins = Math.floor(diff / 60000)
+    const secs = Math.floor((diff % 60000) / 1000)
+    return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`
+  }
+
+  const stats = [
+    {
+      label: "Credits Remaining",
+      value: usage?.credits ?? 0,
+      sub: "100 free on signup",
+      icon: "⚡",
+      color: "text-yellow-400",
+    },
+    {
+      label: "Total Conversions",
+      value: usage?.totalJobs ?? 0,
+      sub: `${usage?.jobsToday ?? 0} today`,
+      icon: "🔄",
+      color: "text-blue-400",
+    },
+    {
+      label: "Success Rate",
+      value: `${usage?.successRate ?? 0}%`,
+      sub: "all time",
+      icon: "✅",
+      color: "text-green-400",
+    },
+    {
+      label: "Formats Supported",
+      value: "28",
+      sub: "input formats",
+      icon: "📄",
+      color: "text-purple-400",
+    },
+  ]
+
+  const maxCount = Math.max(...(usage?.dailyUsage?.map(d => d.count) ?? [1]), 1)
 
   return (
     <AppLayout>
       {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
 
       {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-3">
-        <div className="bg-white border border-border rounded-md p-3 dark:bg-slate-900 dark:border-slate-700">
-          <div className="text-[10px] text-text-tertiary mb-1.5">Credits</div>
-          <div className="text-[20px] font-medium text-secondary">{credits}</div>
-        </div>
-        <div className="bg-white border border-border rounded-md p-3 dark:bg-slate-900 dark:border-slate-700">
-          <div className="text-[10px] text-text-tertiary mb-1.5">Total jobs</div>
-          <div className="text-[20px] font-medium text-primary">{totalJobs}</div>
-        </div>
-        <div className="bg-white border border-border rounded-md p-3 dark:bg-slate-900 dark:border-slate-700">
-          <div className="text-[10px] text-text-tertiary mb-1.5">Jobs today</div>
-          <div className="text-[20px] font-medium text-accent">{jobsToday}</div>
-        </div>
-        <div className="bg-white border border-border rounded-md p-3 dark:bg-slate-900 dark:border-slate-700">
-          <div className="text-[10px] text-text-tertiary mb-1.5">Success rate</div>
-          <div className="text-[20px] font-medium text-accent">{successRate}%</div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        {stats.map(stat => (
+          <div key={stat.label} className="rounded-lg border border-border bg-card p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <span>{stat.icon}</span>
+              <span className="text-xs text-muted-foreground">{stat.label}</span>
+            </div>
+            <div className={`text-2xl font-bold ${stat.color}`}>{stat.value}</div>
+            <div className="text-xs text-muted-foreground mt-1">{stat.sub}</div>
+          </div>
+        ))}
       </div>
+
+      {/* Credit warning */}
+      {(usage?.credits ?? 0) < 10 && (
+        <div className="mb-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-400">
+          ⚠️ You have {usage.credits} credits remaining.
+          <a href="/billing" className="underline ml-1">View plans →</a>
+        </div>
+      )}
+
+      {/* Daily usage chart */}
+      {usage?.dailyUsage?.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4 mb-6">
+          <h3 className="text-sm font-medium text-muted-foreground mb-4">
+            Conversions — last 30 days
+          </h3>
+          <div className="flex items-end gap-1 h-24">
+            {usage.dailyUsage.map(day => (
+              <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
+                <div
+                  className="w-full bg-primary/60 rounded-sm"
+                  style={{
+                    height: `${maxCount > 0 ? (day.count / maxCount) * 96 : 0}px`,
+                    minHeight: day.count > 0 ? '4px' : '0',
+                  }}
+                  title={`${day.date}: ${day.count} conversions`}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Upload zone */}
       <div
@@ -424,15 +485,22 @@ export default function Dashboard() {
               </span>
               <span className="text-[11px]">
                 {job.status === 'DONE' && job.outputUrl ? (
-                  <a
-                    href={job.outputUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary cursor-pointer hover:underline"
-                    onClick={() => refreshCredits()}
-                  >
-                    Download
-                  </a>
+                  <div className="flex flex-col gap-0.5">
+                    <a
+                      href={job.outputUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary cursor-pointer hover:underline"
+                      onClick={() => refreshCredits()}
+                    >
+                      Download
+                    </a>
+                    {job.expiresAt && (
+                      <span className="text-[10px] text-orange-400">
+                        ⏱ {formatTimeLeft(job.expiresAt)}
+                      </span>
+                    )}
+                  </div>
                 ) : job.status === 'FAILED' ? (
                   <span className="text-red-500 text-[10px]" title={job.error}>Error</span>
                 ) : (

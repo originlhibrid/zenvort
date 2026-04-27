@@ -117,6 +117,7 @@ class JobSchema(BaseModel):
     converter_used: str | None = Field(default=None, validation_alias="converterUsed")
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
+    expires_at: str | None = Field(default=None, validation_alias="expiresAt")
 
     @field_validator("error", mode="before")
     @classmethod

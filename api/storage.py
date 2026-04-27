@@ -36,7 +36,7 @@ def delete_file(storage_key: str) -> None:
     _get_s3_client().delete_object(Bucket=get_settings().R2_BUCKET_NAME, Key=storage_key)
 
 
-def generate_download_url(storage_key: str, expires_seconds: int = 3600) -> str:
+def generate_download_url(storage_key: str, expires_seconds: int = 840) -> str:
     return _get_s3_client().generate_presigned_url(
         "get_object",
         Params={

@@ -3,6 +3,7 @@ import os
 import shutil
 import tempfile
 import uuid
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -96,6 +97,13 @@ async def get_job(
         job_data["input_url"] = generate_download_url(job_data["input_url"])
     if job_data.get("output_url"):
         job_data["output_url"] = generate_download_url(job_data["output_url"])
+    if job.status == "DONE" and job.output_url:
+        # Calculate expiry: 15 minutes after job completion
+        updated: datetime = job.updated_at
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        expires_at = updated + timedelta(minutes=15)
+        job_data["expiresAt"] = expires_at.isoformat()
     return job_data
 
 

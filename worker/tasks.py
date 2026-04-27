@@ -13,7 +13,7 @@ from sqlalchemy.orm import sessionmaker
 
 from worker.celery_app import celery_app
 from worker.config import get_settings
-from worker.storage import upload_file, download_file
+from worker.storage import upload_file, download_file, delete_file
 from worker.executor import execute_conversion
 from worker.security.path_guard import TMP_DIR, sanitize_and_assert_tmp_path
 from worker.security.mime_guard import assert_mime_type_matches
@@ -36,12 +36,35 @@ def _get_ext_from_url(storage_key: str, fallback_format: str) -> str:
     return fallback_format
 
 
-def _cleanup(job_id: str) -> None:
+def _cleanup_local(job_id: str) -> None:
+    """Remove temp files from local disk."""
     for f in glob.glob(f"{TMP_DIR}/{job_id}-*"):
         try:
             os.unlink(f)
         except OSError:
             pass
+
+
+def _delete_input_from_r2(job_id: str, input_url: str) -> None:
+    """Delete the uploaded input file from R2 immediately after conversion."""
+    try:
+        # input_url is a storage key like "inputs/<job_id>/filename.ext"
+        # or a full URL — extract the path key
+        key = input_url
+        if input_url.startswith("http"):
+            parsed = urlparse(input_url)
+            # R2 URLs contain the key after the bucket name
+            path = parsed.path.lstrip("/")
+            # Strip the bucket name prefix if present
+            bucket = settings.R2_BUCKET_NAME
+            if path.startswith(bucket + "/"):
+                key = path[len(bucket) + 1:]
+            else:
+                key = path
+        delete_file(key)
+        logger.info(f"[worker][{job_id}] Input file deleted from R2")
+    except Exception as e:
+        logger.warning(f"[worker][{job_id}] Failed to delete input from R2: {e}")
 
 
 def _fire_webhook(user_id: str, job_id: str, status: str) -> None:
@@ -82,7 +105,7 @@ def process_job(self, job_id: str) -> dict:
             job.status = "FAILED"
             job.error = "Unrecoverable: input and output formats are identical"
             db.commit()
-        _cleanup(job_id)
+        _cleanup_local(job_id)
         return {"error": "unrecoverable"}
 
     print(f"[worker][{job_id}] Job received "
@@ -109,7 +132,8 @@ def process_job(self, job_id: str) -> dict:
                     "Input file exceeds 200MB limit", input_format, output_format
                 )
                 db.commit()
-            _cleanup(job_id)
+            _cleanup_local(job_id)
+            _delete_input_from_r2(job_id, input_url)
             return {"error": "unrecoverable"}
 
         with SyncSession() as db:
@@ -130,7 +154,8 @@ def process_job(self, job_id: str) -> dict:
                 job.output_url = cached.output_url
                 job.converter_used = "cache"
                 db.commit()
-            _cleanup(job_id)
+            _cleanup_local(job_id)
+            _delete_input_from_r2(job_id, input_url)
             if user_id:
                 _fire_webhook(user_id, job_id, "DONE")
             return {"status": "DONE", "cached": True}
@@ -154,7 +179,8 @@ def process_job(self, job_id: str) -> dict:
                     "Output file exceeds 500MB limit", input_format, output_format
                 )
                 db.commit()
-            _cleanup(job_id)
+            _cleanup_local(job_id)
+            _delete_input_from_r2(job_id, input_url)
             return {"error": "unrecoverable"}
 
         assert_mime_type_matches(local_output, output_format)
@@ -199,6 +225,17 @@ def process_job(self, job_id: str) -> dict:
                 job.updated_at = datetime.utcnow()
                 db.commit()
 
+        # Delete input from R2 immediately after conversion (success or not)
+        _delete_input_from_r2(job_id, input_url)
+        _cleanup_local(job_id)
+
+        # Schedule output file deletion 15 minutes from now
+        delete_output_file.apply_async(
+            args=[output_key, job_id],
+            countdown=15 * 60,  # 900 seconds = 15 minutes
+        )
+        logger.info(f"[worker][{job_id}] Output deletion scheduled in 15 minutes")
+
         if user_id:
             _fire_webhook(user_id, job_id, "DONE")
 
@@ -212,6 +249,8 @@ def process_job(self, job_id: str) -> dict:
                 "Time limit exceeded", input_format, output_format
             )
             db.commit()
+        _cleanup_local(job_id)
+        _delete_input_from_r2(job_id, input_url)
         raise
 
     except ValueError as exc:
@@ -221,6 +260,8 @@ def process_job(self, job_id: str) -> dict:
                 job.status = "FAILED"
                 job.error = _sanitize_error(str(exc), input_format, output_format)
                 db.commit()
+        _cleanup_local(job_id)
+        _delete_input_from_r2(job_id, input_url)
         return {"error": str(exc)}
 
     except Exception as exc:
@@ -232,7 +273,16 @@ def process_job(self, job_id: str) -> dict:
             job.status = "FAILED"
             job.error = _sanitize_error(str(exc), input_format, output_format)
             db.commit()
+        _cleanup_local(job_id)
+        _delete_input_from_r2(job_id, input_url)
         raise self.retry(exc=exc, countdown=30)
 
-    finally:
-        _cleanup(job_id)
+
+@celery_app.task(name="worker.tasks.delete_output_file", ignore_result=True)
+def delete_output_file(output_key: str, job_id: str) -> None:
+    """Deletes output file from R2 15 minutes after job completes."""
+    try:
+        delete_file(output_key)
+        logger.info(f"[cleanup][{job_id}] Output file deleted from R2: {output_key}")
+    except Exception as e:
+        logger.warning(f"[cleanup][{job_id}] Failed to delete output from R2: {e}")
