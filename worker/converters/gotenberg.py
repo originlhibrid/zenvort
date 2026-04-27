@@ -17,6 +17,10 @@ PDFENGINES_ROUTE  = "/forms/pdfengines/convert"
 # the intermediate PDF produced in step 1 during step 2.
 GOTENBERG_SHARED_DIR = "/tmp/gotenberg"
 
+# Formats that Gotenberg LibreOffice can return directly (via "format" param).
+# For these, we skip the PDF intermediate and write Gotenberg's response directly.
+_GOTENBERG_DIRECT_FORMATS = frozenset(("docx", "xlsx", "pptx", "odt", "ods", "odp"))
+
 MIME_MAP = {
     "pdf":  "application/pdf",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -81,7 +85,6 @@ def convert(
     endpoint = LIBREOFFICE_ROUTE
 
     if input_format == "pdf" and output_format in ("png", "jpg", "jpeg"):
-        # BUG 1 fix: PDF → image via pdf2image instead of Gotenberg
         _pdf_to_image(input_path, output_path, output_format, timeout_s)
         return
 
@@ -104,14 +107,21 @@ def convert(
 
     start = time.perf_counter()
 
+    # Build multipart form fields for Gotenberg
+    form_fields = [
+        ("files", (f"input.{ext}", file_bytes, mime)),
+        # Gotenberg LibreOffice requires nativePageRanges for page selection
+        ("nativePageRanges", (None, "1-")),
+    ]
+    # For document formats (docx, xlsx, pptx, etc.), specify output format
+    # so Gotenberg returns the correct binary instead of PDF
+    if output_format in _GOTENBERG_DIRECT_FORMATS:
+        form_fields.append(("format", (None, output_format)))
+
     with httpx.Client(timeout=httpx.Timeout(timeout_s, connect=5.0)) as client:
         response = client.post(
             f"{GOTENBERG_URL}{endpoint}",
-            files={
-                "files": (f"input.{ext}", file_bytes, mime),
-                # BUG 1 fix: Gotenberg LibreOffice requires nativePageRanges
-                "nativePageRanges": (None, "1-"),
-            },
+            files=form_fields,
         )
 
     duration_ms = int((time.perf_counter() - start) * 1000)
@@ -123,44 +133,56 @@ def convert(
             f"{input_format}->{output_format}: {response.text[:500]}"
         )
 
-    if output_format == "pdf":
-        _write_output(response, output_path)
-        return
-
-    # ── Two-pass conversion (BUG 1 fix) ────────────────────────────────────
+    # ── Handle output ────────────────────────────────────────────────────
     #
-    # Gotenberg's LibreOffice endpoint always returns PDF. For non-PDF outputs:
-    #   step 1: save Gotenberg's PDF response to shared volume
-    #   step 2: post-process the PDF to the target format
+    # Gotenberg's LibreOffice returns different content based on input/output:
+    #   - PDF input + format param → Gotenberg may return PDF (not the format)
+    #   - Non-PDF input + format param → Gotenberg returns the requested format
     #
-    # step 2 helpers:
-    #   txt  → pdftotext (most reliable for plain text)
-    #   docx → pdftotext → python-docx document
-    #   csv  → pdftotext → best-effort CSV parsing
-    #   html → pdftotext -htmlmeta OR minimal HTML wrapper
+    # For PDF→DOCX specifically, Gotenberg returns PDF. We need to convert
+    # via _pdf_to_docx (which uses pdftotext + python-docx with sanitization).
     #
-    os.makedirs(GOTENBERG_SHARED_DIR, exist_ok=True)
-    tmp_pdf = os.path.join(GOTENBERG_SHARED_DIR, f"got-tmp-{os.getpid()}-{time.time_ns()}.pdf")
-
-    try:
-        with open(tmp_pdf, "wb") as f:
+    # For other formats where Gotenberg returns the correct type, we write directly.
+    #
+    if input_format == "pdf" and output_format == "docx":
+        # Gotenberg always returns PDF for PDF input. Convert via pdftotext+docx.
+        os.makedirs(GOTENBERG_SHARED_DIR, exist_ok=True)
+        tmp_pdf = os.path.join(GOTENBERG_SHARED_DIR, f"got-tmp-{os.getpid()}-{time.time_ns()}.pdf")
+        try:
+            with open(tmp_pdf, "wb") as f:
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    f.write(chunk)
+            _pdf_to_docx(tmp_pdf, output_path, timeout_s)
+        finally:
+            if os.path.exists(tmp_pdf):
+                os.unlink(tmp_pdf)
+    elif output_format in _GOTENBERG_DIRECT_FORMATS:
+        # Gotenberg returns the format directly — write bytes to output
+        with open(output_path, "wb") as f:
             for chunk in response.iter_bytes(chunk_size=8192):
                 f.write(chunk)
+    elif output_format == "pdf":
+        _write_output(response, output_path)
+    else:
+        # Convert via intermediate PDF (txt, csv, html, etc.)
+        os.makedirs(GOTENBERG_SHARED_DIR, exist_ok=True)
+        tmp_pdf = os.path.join(GOTENBERG_SHARED_DIR, f"got-tmp-{os.getpid()}-{time.time_ns()}.pdf")
+        try:
+            with open(tmp_pdf, "wb") as f:
+                for chunk in response.iter_bytes(chunk_size=8192):
+                    f.write(chunk)
 
-        if output_format == "txt":
-            _pdf_to_txt(tmp_pdf, output_path, timeout_s)
-        elif output_format == "docx":
-            _pdf_to_docx(tmp_pdf, output_path, timeout_s)
-        elif output_format == "csv":
-            _pdf_to_csv(tmp_pdf, output_path, timeout_s)
-        elif output_format == "html":
-            _pdf_to_html(tmp_pdf, output_path, timeout_s)
-        else:
-            # Fallback: treat as docx
-            _pdf_to_docx(tmp_pdf, output_path, timeout_s)
-    finally:
-        if os.path.exists(tmp_pdf):
-            os.unlink(tmp_pdf)
+            if output_format == "txt":
+                _pdf_to_txt(tmp_pdf, output_path, timeout_s)
+            elif output_format == "csv":
+                _pdf_to_csv(tmp_pdf, output_path, timeout_s)
+            elif output_format == "html":
+                _pdf_to_html(tmp_pdf, output_path, timeout_s)
+            else:
+                raise ValueError(f"Unsupported output format: {output_format}")
+        finally:
+            if os.path.exists(tmp_pdf):
+                os.unlink(tmp_pdf)
 
     if os.path.getsize(output_path) == 0:
         raise RuntimeError(f"gotenberg: empty output for {input_format}->{output_format}")
@@ -187,10 +209,7 @@ def _pdf_to_image(
     output_format: str,
     timeout_s: float,
 ) -> None:
-    """
-    BUG 1 fix: use pdf2image (pdftoppm + PIL) to render PDF pages as raster
-    images. Much more reliable than Gotenberg pdfengines for PNG/JPG output.
-    """
+    """Use pdf2image (pdftoppm + PIL) to render PDF pages as raster images."""
     from pdf2image import convert_from_path
     from PIL import Image
 
@@ -230,35 +249,6 @@ def _pdf_to_txt(pdf_path: str, output_path: str, timeout_s: float) -> None:
         check=True,
     )
     Path(output_path).write_bytes(result.stdout)
-
-
-def _pdf_to_docx(pdf_path: str, output_path: str, timeout_s: float) -> None:
-    """
-    BUG 1 fix: build a minimal DOCX from the pdftotext output using python-docx.
-    """
-    result = subprocess.run(
-        ["pdftotext", "-layout", pdf_path, "-"],
-        capture_output=True,
-        timeout=timeout_s,
-        check=True,
-    )
-    text = result.stdout  # already bytes from capture_output
-
-    from docx import Document
-    from docx.shared import Pt
-
-    doc = Document()
-    for para_text in text.split(b"\n\n"):
-        if isinstance(para_text, bytes):
-            para_text = para_text.decode("utf-8", errors="replace")
-        para_text = para_text.strip()
-        if not para_text:
-            continue
-        para = doc.add_paragraph()
-        run = para.add_run(para_text)
-        run.font.size = Pt(11)
-
-    doc.save(output_path)
 
 
 def _pdf_to_csv(pdf_path: str, output_path: str, timeout_s: float) -> None:
@@ -305,3 +295,36 @@ def _pdf_to_html(pdf_path: str, output_path: str, timeout_s: float) -> None:
         html += "\n".join(lines)
         html += "\n</body></html>"
         Path(output_path).write_text(html, encoding="utf-8")
+
+def _pdf_to_docx(pdf_path: str, output_path: str, timeout_s: float) -> None:
+    """
+    Convert PDF to DOCX via pdftotext + python-docx.
+    Sanitize extracted text to remove invalid XML characters.
+    """
+    result = subprocess.run(
+        ["pdftotext", "-layout", pdf_path, "-"],
+        capture_output=True,
+        timeout=timeout_s,
+        check=True,
+    )
+    text = result.stdout
+
+    from docx import Document
+    from docx.shared import Pt
+
+    doc = Document()
+    for para_text in text.split(b"\n\n"):
+        if isinstance(para_text, bytes):
+            para_text = para_text.decode("utf-8", errors="replace")
+        para_text = para_text.strip()
+        if not para_text:
+            continue
+        # Remove control characters that are invalid in XML
+        para_text = "".join(c for c in para_text if ord(c) >= 32 or c in "\t\n")
+        if not para_text:
+            continue
+        para = doc.add_paragraph()
+        run = para.add_run(para_text)
+        run.font.size = Pt(11)
+
+    doc.save(output_path)
