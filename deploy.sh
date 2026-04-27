@@ -17,7 +17,7 @@ cd /root/Zenvort
 docker compose up --build -d api worker
 
 echo "=== Running migrations ==="
-docker compose run --rm migrate alembic upgrade head
+docker compose run --rm migrate alembic --config /app/db/alembic.ini upgrade head
 
 echo "=== Done ==="
 curl -s https://zenvort.devbrid.in/api/health
