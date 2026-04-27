@@ -2,7 +2,6 @@ import os
 import time
 import uuid
 from dataclasses import dataclass
-from worker.routes import get_route
 from worker.security.path_guard import TMP_DIR, sanitize_and_assert_tmp_path
 
 
@@ -28,13 +27,14 @@ def execute_conversion(
     sanitize_and_assert_tmp_path(input_path)
     sanitize_and_assert_tmp_path(output_path)
 
-    route = get_route(input_format, output_format)
-    if not route:
+    from worker.routes import ROUTES
+    converters = ROUTES.get(f"{input_format}→{output_format}")
+    if not converters:
         raise RuntimeError(f"No conversion route for {input_format}→{output_format}")
 
     attempts: list[AttemptResult] = []
 
-    for converter_fn in route["converters"]:
+    for converter_fn in converters:
         converter_name = converter_fn.__module__ + "." + converter_fn.__name__
 
         if os.path.exists(output_path):

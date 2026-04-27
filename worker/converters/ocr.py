@@ -1,5 +1,5 @@
-# worker/converters/tesseract.py
-# Tesseract OCR — scanned image / PDF → searchable text
+# worker/converters/ocr.py
+# All OCR conversions via Tesseract.
 #
 # Supported conversions:
 #   image (jpg, png, webp, bmp, tiff, gif, avif) → txt
@@ -13,20 +13,28 @@ import os
 import subprocess
 import tempfile
 import shutil
+import logging
 from pathlib import Path
-from PIL import Image
 
+from PIL import Image
 from worker.security.path_guard import sanitize_and_assert_tmp_path
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_LANG = "eng"
 DEFAULT_OEM   = "3"
 DEFAULT_PSM   = "3"
 
-# Tesseract cannot read these formats — pre-convert to PNG via Pillow first
+# Tesseract cannot read these — pre-convert to PNG via Pillow first.
 _UNSUPPORTED_EXTS = frozenset(("avif", "heic", "heif", "jxl", "jfif"))
 
-# Tesseract writes <output_base>.txt automatically; pass output_base, not "stdout"
-TESS_CMD_BASE = ["tesseract", "-l", DEFAULT_LANG, "--oem", DEFAULT_OEM, "--psm", DEFAULT_PSM]
+# Tesseract writes <output_base>.txt automatically.
+TESS_CMD_BASE = [
+    "tesseract",
+    "-l", DEFAULT_LANG,
+    "--oem", DEFAULT_OEM,
+    "--psm", DEFAULT_PSM,
+]
 
 
 def convert(
@@ -39,52 +47,65 @@ def convert(
     sanitize_and_assert_tmp_path(input_path)
     sanitize_and_assert_tmp_path(output_path)
 
+    logger.info(f"[{input_format}→{output_format}] using tesseract")
+
     input_path = Path(input_path)
-    input_ext  = input_path.suffix.lstrip(".").lower()
+    input_ext = input_path.suffix.lstrip(".").lower()
 
     if input_ext == "pdf":
         _ocr_pdf(input_path, output_path, timeout_s)
     elif input_ext in _UNSUPPORTED_EXTS:
-        # BUG 4 fix: pre-convert avif/heic/… to PNG, then OCR the PNG
+        # Pre-convert unsupported format to PNG, then OCR the PNG.
         _ocr_via_png(input_path, output_path, timeout_s)
     else:
         _ocr_image(input_path, output_path, timeout_s)
 
+    _assert_output(output_path, input_format, output_format)
+
+
+def _assert_output(output_path, input_format, output_format) -> None:
+    p = Path(output_path)
+    if not p.exists() or p.stat().st_size == 0:
+        raise RuntimeError(
+            f"ocr converter produced no output for {input_format}→{output_format}"
+        )
+
 
 def _ocr_image(image_path: Path, output_path: str, timeout_s: float) -> None:
     """
-    BUG 4 fix: use file output mode — Tesseract writes <base>.txt automatically.
-    Do NOT use stdout; passing "stdout" as the output name then writing the
-    capture buffer can silently drop output if the capture is empty.
+    Use file output mode — Tesseract writes <base>.txt automatically.
+    Do NOT use stdout; passing "stdout" can silently drop output.
     """
-    output_base = str(output_path).removesuffix(".txt")
+    output_base = str(Path(output_path).with_suffix(""))
     result = subprocess.run(
         [*TESS_CMD_BASE, str(image_path), output_base],
-        capture_output  = True,
-        text            = True,
-        timeout         = timeout_s,
+        capture_output=True,
+        text=True,
+        timeout=timeout_s,
     )
     if result.returncode not in (0, 1):
         raise RuntimeError(
-            f"[tesseract] exit {result.returncode}: {result.stderr.decode()[:300]}"
+            f"[tesseract] exit {result.returncode}: "
+            f"{result.stderr.decode(errors='replace')[:300]}"
         )
-    print(f"[tesseract] OCR image {image_path.name} → {Path(output_path).name}")
+    logger.info(
+        f"[tesseract] OCR image {image_path.name} → {Path(output_path).name}"
+    )
 
 
 def _ocr_via_png(image_path: Path, output_path: str, timeout_s: float) -> None:
-    """
-    Pre-convert an unsupported format (avif, heic, etc.) to PNG via Pillow,
-    then run tesseract on the temp PNG.
-    """
-    tmp_dir  = Path(tempfile.mkdtemp(prefix="tess-preconv-"))
-    tmp_png  = tmp_dir / f"preconv.{image_path.suffix}.png"
+    """Pre-convert unsupported format to PNG via Pillow, then OCR."""
+    tmp_dir = Path(tempfile.mkdtemp(prefix="tess-preconv-"))
+    tmp_png = tmp_dir / f"preconv.{image_path.suffix}.png"
     try:
         img = Image.open(image_path)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
         img.save(tmp_png, format="PNG")
         _ocr_image(tmp_png, output_path, timeout_s)
-        print(f"[tesseract] pre-converted {image_path.suffix} → PNG for OCR")
+        logger.info(
+            f"[tesseract] pre-converted {image_path.suffix} → PNG for OCR"
+        )
     finally:
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
@@ -118,13 +139,13 @@ def _ocr_pdf(pdf_path: Path, output_path: str, timeout_s: float) -> None:
                 timeout=timeout_s,
             )
             if result.returncode not in (0, 1):
-                continue  # skip pages that fail — not fatal
+                continue  # skip failed pages — not fatal
             text = result.stdout.strip()
             if text:
                 lines.append(f"--- Page {i} ---\n{text}")
 
         Path(output_path).write_text("\n\n".join(lines), encoding="utf-8")
-        print(
+        logger.info(
             f"[tesseract] OCR PDF {pdf_path.name} "
             f"({len(page_files)} pages) → {Path(output_path).name}"
         )

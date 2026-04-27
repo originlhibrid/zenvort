@@ -1,6 +1,8 @@
-from worker.converters.gotenberg import convert as gotenberg
-from worker.converters.ffmpeg   import convert as ffmpeg
-from worker.converters.pillow  import convert as pillow
-from worker.converters.tesseract import convert as tesseract
-from worker.converters.calibre  import convert as calibre
-from worker.converters.pandoc   import convert as pandoc
+# worker/converters/__init__.py
+# Four responsibility-based converters.  Routes table decides which category
+# handles each format pair; the converter handles internal library routing.
+
+from worker.converters import documents
+from worker.converters import images
+from worker.converters import media
+from worker.converters import ocr
