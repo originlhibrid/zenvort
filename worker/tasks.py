@@ -17,6 +17,7 @@ from worker.storage import upload_file, download_file
 from worker.executor import execute_conversion
 from worker.security.path_guard import TMP_DIR, sanitize_and_assert_tmp_path
 from worker.security.mime_guard import assert_mime_type_matches
+from worker.utils import _sanitize_error
 from api.models import User, Job, CreditLog
 
 settings = get_settings()
@@ -104,7 +105,9 @@ def process_job(self, job_id: str) -> dict:
             with SyncSession() as db:
                 job = db.query(Job).filter(Job.id == job_id).first()
                 job.status = "FAILED"
-                job.error = "Input file exceeds 200MB limit"
+                job.error = _sanitize_error(
+                    "Input file exceeds 200MB limit", input_format, output_format
+                )
                 db.commit()
             _cleanup(job_id)
             return {"error": "unrecoverable"}
@@ -147,7 +150,9 @@ def process_job(self, job_id: str) -> dict:
             with SyncSession() as db:
                 job = db.query(Job).filter(Job.id == job_id).first()
                 job.status = "FAILED"
-                job.error = "Output file exceeds 500MB limit"
+                job.error = _sanitize_error(
+                    "Output file exceeds 500MB limit", input_format, output_format
+                )
                 db.commit()
             _cleanup(job_id)
             return {"error": "unrecoverable"}
@@ -180,7 +185,9 @@ def process_job(self, job_id: str) -> dict:
                         )
                         db.add(credit_log)
                     else:
-                        logger.warning(f"[worker][{job_id}] User {user_id} has no credits — skipping deduction")
+                        logger.warning(
+                            f"[worker][{job_id}] User {user_id} has no credits — skipping deduction"
+                        )
 
                 db.commit()
         else:
@@ -201,7 +208,9 @@ def process_job(self, job_id: str) -> dict:
         with SyncSession() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
             job.status = "FAILED"
-            job.error = "Time limit exceeded"
+            job.error = _sanitize_error(
+                "Time limit exceeded", input_format, output_format
+            )
             db.commit()
         raise
 
@@ -210,17 +219,18 @@ def process_job(self, job_id: str) -> dict:
             job = db.query(Job).filter(Job.id == job_id).first()
             if job:
                 job.status = "FAILED"
-                job.error = f"Invalid input: {exc}"
+                job.error = _sanitize_error(str(exc), input_format, output_format)
                 db.commit()
         return {"error": str(exc)}
 
     except Exception as exc:
-        error_str = str(exc)[:2000]
-        print(f"[worker][{job_id}] Error: {error_str}")
+        logger.error(
+            f"[worker][{job_id}] Conversion failed: {exc}", exc_info=True
+        )
         with SyncSession() as db:
             job = db.query(Job).filter(Job.id == job_id).first()
             job.status = "FAILED"
-            job.error = error_str
+            job.error = _sanitize_error(str(exc), input_format, output_format)
             db.commit()
         raise self.retry(exc=exc, countdown=30)
 

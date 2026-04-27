@@ -4,6 +4,28 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 import re
 
 
+# ── Error sanitisation ────────────────────────────────────────────────────────────────
+
+
+def _strip_internal(s: str) -> str:
+    """Final safety net: strip any remaining internal paths or module references."""
+    s = re.sub(r"\bworker\.\S+", "", s)
+    s = re.sub(r"/\S+\.py\b", "", s)
+    s = re.sub(r"line \d+", "", s)
+    s = re.sub(r"\bpdf2docx\b", "", s)
+    s = re.sub(r"\bcairosvg\b", "", s)
+    s = re.sub(r"\bpymupdf\b", "", s)
+    s = re.sub(r"\bimg2pdf\b", "", s)
+    s = re.sub(r"\bgotenberg\b", "", s)
+    s = re.sub(r"\btesseract\b", "", s)
+    s = re.sub(r"\bffmpeg\b", "", s)
+    s = re.sub(r"\bpillow\b", "", s)
+    s = re.sub(r"\bpandoc\b", "", s)
+    s = re.sub(r"\bcalibre\b", "", s)
+    s = re.sub(r"\bworker\b", "", s)
+    return " ".join(s.split()).strip()
+
+
 # ── helpers ────────────────────────────────────────────────────────────────────────
 
 
@@ -95,6 +117,14 @@ class JobSchema(BaseModel):
     converter_used: str | None = Field(default=None, validation_alias="converterUsed")
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
     updated_at: datetime | None = Field(default=None, validation_alias="updatedAt")
+
+    @field_validator("error", mode="before")
+    @classmethod
+    def sanitize_error(cls, v):
+        if v is None:
+            return None
+        cleaned = _strip_internal(str(v))
+        return cleaned if cleaned else "Conversion failed. Please try again."
 
     @field_validator("converter_used", mode="before")
     @classmethod

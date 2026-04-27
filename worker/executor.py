@@ -1,8 +1,13 @@
 import os
 import time
 import uuid
+import logging
 from dataclasses import dataclass
+
 from worker.security.path_guard import TMP_DIR, sanitize_and_assert_tmp_path
+from worker.utils import _sanitize_error
+
+logger = logging.getLogger("zenvort.worker")
 
 
 @dataclass
@@ -59,13 +64,22 @@ def execute_conversion(
         if error is None:
             return {
                 "converter_used": converter_name,
-                "attempts": attempts + [
-                    AttemptResult(converter_name, duration_ms, None)
-                ],
+                "attempts": attempts
+                + [AttemptResult(converter_name, duration_ms, None)],
             }
 
         attempts.append(AttemptResult(converter_name, duration_ms, error))
-        print(f"[executor] {converter_name} failed: {error}")
+        logger.info(f"[executor] {converter_name} failed: {error}")
 
-    errors = "\n".join(f"{a.converter_name}: {a.error}" for a in attempts)
-    raise RuntimeError(f"All converters failed for {input_format}→{output_format}:\n{errors}")
+    # Log full internal details for debugging — never expose to user
+    logger.error(
+        f"All converters failed for {input_format}→{output_format}:\n"
+        + "\n".join(f"  {a.converter_name}: {a.error}" for a in attempts)
+    )
+    raise RuntimeError(
+        _sanitize_error(
+            "\n".join(attempt.error or "" for attempt in attempts),
+            input_format,
+            output_format,
+        )
+    )
