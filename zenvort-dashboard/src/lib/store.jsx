@@ -45,7 +45,12 @@ export function AuthProvider({ children }) {
 }
 
 export function useAuth() {
-  return useContext(AuthContext)
+  const context = useContext(AuthContext)
+  // Provide safe defaults when called outside AuthProvider
+  if (!context) {
+    return { state: initialAuth, dispatch: () => {} }
+  }
+  return context
 }
 
 // ── Theme State ─────────────────────────────────────────────

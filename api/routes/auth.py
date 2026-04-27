@@ -81,7 +81,7 @@ async def signup(
 
 
 @router.post("/login", response_model=UserLoginResponse)
-@limiter.limit("5/15minute")
+@limiter.limit("30/15minute")
 async def login(
     request: Request,
     body: LoginRequest,

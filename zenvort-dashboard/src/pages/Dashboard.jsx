@@ -302,7 +302,7 @@ export default function Dashboard() {
       </div>
 
       {/* Credit warning */}
-      {(usage?.credits ?? 0) < 10 && (
+      {(usage?.credits ?? 0) < 10 && usage && (
         <div className="mb-4 rounded-lg border border-orange-500/30 bg-orange-500/10 px-4 py-3 text-sm text-orange-400">
           ⚠️ You have {usage.credits} credits remaining.
           <a href="/billing" className="underline ml-1">View plans →</a>
