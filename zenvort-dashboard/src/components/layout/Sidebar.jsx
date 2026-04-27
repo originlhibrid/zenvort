@@ -12,12 +12,19 @@ export default function Sidebar() {
   const { state } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const user = JSON.parse(localStorage.getItem('zenvort_user') || '{}')
 
   const handleLogout = () => {
     localStorage.removeItem('zenvort_api_key')
     localStorage.removeItem('zenvort_user')
     navigate('/login')
   }
+
+  // Only show Admin nav item for admin users
+  const visibleNavItems = navItems.filter(item => {
+    if (item.path === '/admin' && user.role !== 'admin') return false
+    return true
+  })
 
   return (
     <div className="w-[180px] bg-slate-900 flex flex-col p-4 flex-shrink-0 min-h-screen">
@@ -29,7 +36,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <div className="flex flex-col gap-1">
-        {navItems.map(item => {
+        {visibleNavItems.map(item => {
           const active = location.pathname === item.path
           return (
             <div

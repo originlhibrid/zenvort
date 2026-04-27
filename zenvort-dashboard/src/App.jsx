@@ -14,6 +14,14 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function AdminRoute({ children }) {
+  const token = localStorage.getItem('zenvort_api_key')
+  const user = JSON.parse(localStorage.getItem('zenvort_user') || '{}')
+  if (!token) return <Navigate to="/login" replace />
+  if (user.role !== 'admin') return <Navigate to="/dashboard" replace />
+  return children
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -51,9 +59,9 @@ function App() {
               <Route
                 path="/admin"
                 element={
-                  <ProtectedRoute>
+                  <AdminRoute>
                     <Admin />
-                  </ProtectedRoute>
+                  </AdminRoute>
                 }
               />
               <Route path="*" element={<Navigate to="/" replace />} />

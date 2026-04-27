@@ -11,14 +11,18 @@ export default function Admin() {
   const [editingId, setEditingId] = useState(null)
   const [editAmount, setEditAmount] = useState('')
   const [error, setError] = useState('')
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const apiKey = localStorage.getItem('zenvort_api_key')
   const authHeader = { Authorization: `Bearer ${apiKey}` }
 
   const fetchUsers = () => {
     fetch(BASE_URL + '/admin/users?page=1', { headers: authHeader })
-      .then(r => r.json())
-      .then(data => { if (data.users) setUsers(data.users) })
+      .then(r => {
+        if (r.status === 403) { setAccessDenied(true); setLoading(false); return }
+        return r.json()
+      })
+      .then(data => { if (data?.users) setUsers(data.users) })
       .catch(() => {})
       .finally(() => setLoading(false))
   }
@@ -62,6 +66,28 @@ export default function Admin() {
 
   const formatDate = (dateStr) => {
     try { return new Date(dateStr).toLocaleDateString('en-IN') } catch { return dateStr }
+  }
+
+  // Handle 403 access denied
+  if (accessDenied) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center flex-1">
+          <div className="text-center">
+            <p className="text-[14px] text-text-secondary mb-2">Access Denied</p>
+            <p className="text-[12px] text-text-tertiary mb-4">
+              You don't have permission to view this page.
+            </p>
+            <a
+              href="/dashboard"
+              className="text-[12px] text-primary hover:underline"
+            >
+              Back to dashboard
+            </a>
+          </div>
+        </div>
+      </AppLayout>
+    )
   }
 
   return (
