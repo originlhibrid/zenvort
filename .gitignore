@@ -19,9 +19,9 @@ __pycache__/
 # Logs
 *.log
 
-# Obsidian/graphify
-graphify/
-graphify-out/
+# Agents / Skills
+.agents/
+.pi/skills/
 
 # Mockups and temp files
 zenvort_design_mockup.html
