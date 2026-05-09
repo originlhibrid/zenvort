@@ -32,9 +32,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ ./api/
 COPY worker/ ./worker/
-COPY db/ ./db/
 
 ENV PYTHONPATH=/app
+ENV DB_PATH=/data/zenvort.db
 
 RUN mkdir -p /tmp/zenvort
 

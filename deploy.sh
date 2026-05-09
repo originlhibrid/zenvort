@@ -1,23 +1,26 @@
 #!/bin/bash
+# deploy.sh — Deploy Zenvort to production
+# Usage: ./deploy.sh
+
 set -e
 
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_ROOT"
+
 echo "=== Pulling latest code ==="
-cd /root/Zenvort
 git pull origin main
 
-echo "=== Rebuilding frontend ==="
-cd zenvort-dashboard
-npm install
-npm run build
-cp -r dist/* /var/www/zenvort/
-chown -R www-data:www-data /var/www/zenvort
+echo "=== Running DB migration ==="
+# Migration 001: remove bot tables (safe to run multiple times)
+docker compose exec api sqlite3 /data/zenvort.db < migrations/001_remove_bot.sql || true
 
-echo "=== Rebuilding backend ==="
-cd /root/Zenvort
-docker compose up --build -d api worker
+echo "=== Rebuilding and restarting services ==="
+docker compose up -d --build
 
-echo "=== Running migrations ==="
-docker compose run --rm migrate alembic --config /app/db/alembic.ini upgrade head
+echo "=== Checking health ==="
+sleep 3
+curl -sf http://localhost:3000/health && echo " ✅ API is up" || echo " ❌ API health check failed"
 
-echo "=== Done ==="
-curl -s https://zenvort.devbrid.in/api/health
+echo ""
+echo "Services:"
+docker compose ps --format "  {{.Name}}: {{.Status}}"

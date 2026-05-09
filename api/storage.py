@@ -1,4 +1,5 @@
 import boto3
+from botocore.config import Config
 from api.config import get_settings
 
 _settings = None
@@ -8,15 +9,17 @@ def _get_s3_client():
     global _settings
     if _settings is None:
         _settings = get_settings()
-    s3 = boto3.Session(
+    s3_client = boto3.client(
+        's3',
+        endpoint_url=f"https://{_settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
         aws_access_key_id=_settings.R2_ACCESS_KEY_ID,
         aws_secret_access_key=_settings.R2_SECRET_ACCESS_KEY,
-    ).client(
-        "s3",
-        endpoint_url=f"https://{_settings.R2_ACCOUNT_ID}.r2.cloudflarestorage.com",
-        region_name="auto",
+        config=Config(
+            signature_version='s3v4',
+            s3={'addressing_style': 'path'}
+        )
     )
-    return s3
+    return s3_client
 
 
 def upload_file(local_path: str, storage_key: str, content_type: str) -> None:

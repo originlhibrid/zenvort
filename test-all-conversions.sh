@@ -141,11 +141,6 @@ if [[ -z "$APIKEY" ]]; then
 fi
 log "Signed up as $EMAIL | apiKey: ${APIKEY:0:12}..."
 
-# ─── CHANGE 5: Credit top-up at start ─────────────────────────────────────────
-echo "[setup] Topping up credits to 500..."
-docker exec zenvort-postgres psql -U zenvort -d zenvort \
-  -c "UPDATE users SET credits = 500 WHERE id = '$USER_ID';" 2>/dev/null || true
-
 # ─── CHANGE 1: Check real sample files ─────────────────────────────────────────
 log "Checking real sample files at $TEST_DIR..."
 

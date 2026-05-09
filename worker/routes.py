@@ -1,27 +1,30 @@
+# Conversion route registry: maps (source_format, target_format) -> converter function
 # worker/routes.py
-# ~150 routes — each is a single line.  The converter handles internal
+# ~160 routes — each is a single line.  The converter handles internal
 # library routing (e.g. documents.py picks pdf2docx vs pandoc vs gotenberg).
 
 from worker.converters.documents import convert as documents
 from worker.converters.images   import convert as images
 from worker.converters.media   import convert as media
 from worker.converters.ocr     import convert as ocr
+from worker.converters.pdf_tools import convert as pdf_tools
+from worker.converters.spreadsheet import convert as spreadsheet
 
 ROUTES = {
     # ── Documents ────────────────────────────────────────────────────────
-    "pdf→png":   [documents],    # Gotenberg pdf2image
-    "pdf→jpg":   [documents],    # Gotenberg pdf2image
-    "pdf→txt":   [documents, ocr],    # Gotenberg (fast) + Tesseract fallback
-    "pdf→docx":  [documents],    # pdf2docx internally
-    "pdf→html":  [documents],    # Gotenberg internally
-    "pdf→rtf":   [documents],    # Gotenberg internally
+    "pdf→png":   [documents],
+    "pdf→jpg":   [documents],
+    "pdf→txt":   [documents, ocr],
+    "pdf→docx":  [documents],
+    "pdf→html":  [documents],
+    "pdf→rtf":   [documents],
 
     "docx→pdf":  [documents],
     "docx→txt":  [documents],
     "docx→html": [documents],
-    "docx→rtf":  [documents],    # Pandoc internally
+    "docx→rtf":  [documents],
 
-    "md→pdf":    [documents],    # Pandoc internally
+    "md→pdf":    [documents],
     "md→html":   [documents],
     "md→txt":    [documents],
     "md→docx":   [documents],
@@ -32,8 +35,6 @@ ROUTES = {
     "html→txt":  [documents],
 
     "xlsx→pdf":  [documents],
-    "xlsx→html": [documents],
-    "xlsx→csv":  [documents],
     "xlsx→txt":  [documents],
     "xlsx→docx": [documents],
 
@@ -53,9 +54,9 @@ ROUTES = {
 
     "odp→pdf":   [documents],
 
-    "rtf→txt":   [documents],    # Pandoc internally
+    "rtf→txt":   [documents],
     "rtf→html":  [documents],
-    "rtf→docx":  [documents],    # Pandoc internally
+    "rtf→docx":  [documents],
     "rtf→pdf":   [documents],
 
     "csv→pdf":   [documents],
@@ -72,7 +73,7 @@ ROUTES = {
     "jpg→png":   [images],
     "jpg→webp":  [images],
     "jpg→avif":  [images],
-    "jpg→pdf":   [images],       # img2pdf internally
+    "jpg→pdf":   [images],
     "jpg→bmp":   [images],
     "jpg→tiff":  [images],
     "jpg→gif":   [images],
@@ -125,8 +126,8 @@ ROUTES = {
     "gif→tiff":  [images],
     "gif→pdf":   [images],
 
-    "svg→pdf":   [images],       # CairoSVG internally
-    "svg→png":   [images],       # CairoSVG internally
+    "svg→pdf":   [images],
+    "svg→png":   [images],
 
     # ── Media ────────────────────────────────────────────────────────────
     "mp4→mp3":   [media],
@@ -196,6 +197,24 @@ ROUTES = {
     "tiff→txt":  [ocr],
     "gif→txt":   [ocr],
     "avif→txt":  [ocr],
+
+    # ── Spreadsheet (openpyxl) ──────────────────────────────────────────
+    # xlsx→csv:  first sheet, comma-separated (sheet_name via job metadata)
+    # xlsx→json: first sheet → array of row objects  (sheet_name via job metadata)
+    # xlsx→html: all sheets as tabbed HTML table
+    # csv→xlsx:  header bold, auto column width
+    # json→xlsx: keys as headers, objects as rows
+    "xlsx→csv":  [spreadsheet],
+    "xlsx→html": [spreadsheet],
+    "xlsx→json": [spreadsheet],
+    "csv→xlsx":  [spreadsheet],
+    "json→xlsx": [spreadsheet],
+
+    # ── PDF Tools (pikepdf) ──────────────────────────────────────────────
+    "pdf→pdf":   [pdf_tools],
+    "pdf→pdfa":  [pdf_tools],
+    "pdf→enc":   [pdf_tools],
+    "pdf→dec":   [pdf_tools],
 }
 
 # Derived — never hardcoded.

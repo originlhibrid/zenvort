@@ -39,8 +39,7 @@ def to_camel(s: str) -> str:
 
 
 class UserSchema(BaseModel):
-    """Used for API responses. Fields are camelCase (alias) so JSON is camelCase.
-    validation_alias lets Pydantic read snake_case SQLAlchemy model attributes."""
+    """API response schema for user profile data."""
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -50,13 +49,17 @@ class UserSchema(BaseModel):
 
     id: str
     email: str
-    credits: int
     role: str = "user"
     webhook_url: str | None = Field(default=None, validation_alias="webhookUrl")
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
+    daily_usage: int = Field(default=0, validation_alias="dailyUsage", description="Number of successful conversions today")
+    daily_limit: int = Field(default=50, validation_alias="dailyLimit", description="Max conversions per day")
+    quota_reset_at: str | None = Field(default=None, validation_alias="quotaResetAt", description="ISO timestamp when daily quota resets")
 
 
 class UserSignupResponse(BaseModel):
+    """Response returned after successful user registration."""
+
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, alias_generator=to_camel)
 
     api_key: str = Field(validation_alias="apiKey")
@@ -64,6 +67,8 @@ class UserSignupResponse(BaseModel):
 
 
 class UserLoginResponse(BaseModel):
+    """Response returned after successful user login."""
+
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, alias_generator=to_camel)
 
     api_key: str = Field(validation_alias="apiKey")
@@ -71,6 +76,8 @@ class UserLoginResponse(BaseModel):
 
 
 class WebhookUpdateResponse(BaseModel):
+    """Response returned after updating a user's webhook URL."""
+
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     ok: bool = True
@@ -81,6 +88,8 @@ class WebhookUpdateResponse(BaseModel):
 
 
 class SignupRequest(BaseModel):
+    """Request body for user registration."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     email: EmailStr
@@ -88,6 +97,8 @@ class SignupRequest(BaseModel):
 
 
 class LoginRequest(BaseModel):
+    """Request body for user login."""
+
     model_config = ConfigDict(populate_by_name=True)
 
     email: EmailStr
@@ -98,8 +109,7 @@ class LoginRequest(BaseModel):
 
 
 class JobSchema(BaseModel):
-    """API response schema. camelCase fields via alias_generator.
-    validation_alias reads snake_case SQLAlchemy model attributes."""
+    """API response schema for a conversion job."""
 
     model_config = ConfigDict(
         from_attributes=True,
@@ -134,6 +144,8 @@ class JobSchema(BaseModel):
 
 
 class JobCreateResponse(BaseModel):
+    """Response returned after successfully creating a conversion job."""
+
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     job_id: str = Field(validation_alias="jobId")
@@ -142,6 +154,8 @@ class JobCreateResponse(BaseModel):
 
 
 class JobListResponse(BaseModel):
+    """Paginated list of conversion jobs."""
+
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     jobs: list[JobSchema]
@@ -150,66 +164,12 @@ class JobListResponse(BaseModel):
     limit: int
 
 
-# ── Billing ───────────────────────────────────────────────────────────────────
-
-
-class PlanSchema(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    pack: str
-    credits: int
-    amount: int
-    currency: str
-    name: str
-
-
-class BillingPurchaseResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    ok: bool = True
-    message: str = "Payment integration coming soon"
-
-
-class BillingPurchaseRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    pack: str
-
-
-class CreditLogSchema(BaseModel):
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True,
-        alias_generator=to_camel,
-    )
-
-    id: str
-    amount: int
-    reason: str
-    job_id: str | None = Field(default=None, validation_alias="jobId")
-    created_at: datetime | None = Field(default=None, validation_alias="createdAt")
-
-
-class BillingUsageResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-
-    credits: int
-    total_jobs: int = Field(validation_alias="totalJobs")
-    jobs_today: int = Field(validation_alias="jobsToday")
-    success_rate: float = Field(validation_alias="successRate")
-    daily_usage: list[dict[str, Any]] = Field(default=[], validation_alias="dailyUsage")
-
-
-class BillingTransactionsResponse(BaseModel):
-    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
-
-    logs: list[CreditLogSchema]
-
-
 # ── Admin ──────────────────────────────────────────────────────────────────────
 
 
 class AdminUserSchema(BaseModel):
+    """Schema for admin user list entries."""
+
     model_config = ConfigDict(
         from_attributes=True,
         populate_by_name=True,
@@ -218,12 +178,13 @@ class AdminUserSchema(BaseModel):
 
     id: str
     email: str
-    credits: int
     role: str
     created_at: datetime | None = Field(default=None, validation_alias="createdAt")
 
 
 class AdminUserListResponse(BaseModel):
+    """Paginated list of users for admin view."""
+
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     users: list[AdminUserSchema]
@@ -233,25 +194,21 @@ class AdminUserListResponse(BaseModel):
 
 
 class AdminStatsResponse(BaseModel):
+    """System-wide statistics for admin dashboard."""
+
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     total_users: int = Field(validation_alias="totalUsers")
     total_jobs: int = Field(validation_alias="totalJobs")
-    total_credits: int = Field(validation_alias="totalCredits")
     jobs_by_status: dict[str, int] = Field(validation_alias="jobsByStatus")
-
-
-class AdminCreditUpdateRequest(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
-
-    amount: int = Field(..., ge=-10000, le=10000)
-    reason: str = "manual_add"
 
 
 # ── Webhook update ─────────────────────────────────────────────────────────────
 
 
 class WebhookUpdateRequest(BaseModel):
+    """Request body for updating a user's webhook URL."""
+
     model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
 
     webhook_url: str = Field(validation_alias="webhookUrl")
@@ -277,5 +234,7 @@ class WebhookUpdateRequest(BaseModel):
 
 
 class HealthResponse(BaseModel):
+    """Health check endpoint response."""
+
     ok: bool = True
     timestamp: str

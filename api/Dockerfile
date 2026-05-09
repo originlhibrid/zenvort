@@ -9,8 +9,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api/ ./api/
 COPY worker/ ./worker/
-COPY db/ ./db/
 
 ENV PYTHONPATH=/app
+ENV DB_PATH=/data/zenvort.db
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "3000"]

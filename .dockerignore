@@ -1,46 +1,29 @@
-# Dependencies
-node_modules
-.npm
-.pnpm-store
-
-# Build outputs
-dist
-build
-*.tsbuildinfo
-
-# Version control
+__pycache__
+*.pyc
+*.pyo
+.env
 .git
 .gitignore
-
-# Environment files
-.env
-.env.*
-!.env.example
-
-# IDE
+*.md
+!README.md
+*.db
+/tmp
+api/
+worker/
+migrations/
+graphify-out/
+pi/
+node_modules
+dist
 .vscode
 .idea
 *.swp
 *.swo
-
-# OS
 .DS_Store
 Thumbs.db
-
-# Logs
 *.log
 logs
-
-# Test
 coverage
 .nyc_output
-
-# Docker
-Dockerfile*
-docker-compose*.yml
-
-# Misc
-*.md
-!README.md
 .turbo
 .cache

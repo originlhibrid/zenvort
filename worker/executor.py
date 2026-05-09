@@ -24,6 +24,25 @@ def execute_conversion(
     input_format: str,
     output_format: str,
 ) -> dict:
+    """Dispatch a file conversion through the converter chain for the given format pair.
+
+    Tries each converter in the route list sequentially. If a converter fails,
+    the next one is tried as a fallback. Only raises if ALL converters fail.
+
+    Args:
+        job_id: UUID of the conversion job (validated before dispatch).
+        input_path: Absolute path to the input file (must be within TMP_DIR).
+        output_path: Absolute path for the output file (must be within TMP_DIR).
+        input_format: Source format (e.g. "pdf").
+        output_format: Target format (e.g. "docx").
+
+    Returns:
+        dict with keys: "converter_used" (str), "attempts" (list[AttemptResult]).
+
+    Raises:
+        ValueError: Invalid job_id, or path traversal detected.
+        RuntimeError: No route found, or all converters failed.
+    """
     try:
         uuid.UUID(job_id)
     except ValueError:
@@ -40,23 +59,25 @@ def execute_conversion(
     attempts: list[AttemptResult] = []
 
     for converter_fn in converters:
-        # Handle both functions (old style) and modules (new 4-file style).
-        # Modules have __spec__.name but no __module__; functions have both.
+        # Identify converter: prefer __spec__.name (module-installed), fallback
+        # to __module__ (inline script-style).  This handles both the 1-file
+        # converter style (functions with __module__) and 4-file style
+        # (module-installed, where __spec__ is set).
         spec = getattr(converter_fn, "__spec__", None)
         if spec is not None:
-            converter_name = spec.name + "." + converter_fn.__name__
+            converter_name = f"{spec.name}.{converter_fn.__name__}"
         else:
-            converter_name = converter_fn.__module__ + "." + converter_fn.__name__
+            converter_name = f"{converter_fn.__module__}.{converter_fn.__name__}"
 
         if os.path.exists(output_path):
             os.unlink(output_path)
 
         start = time.perf_counter()
-        error = None
+        error: str | None = None
 
         try:
             converter_fn(input_path, output_path, input_format, output_format)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 — intentional broad catch for fallback chain
             error = str(exc)
 
         duration_ms = int((time.perf_counter() - start) * 1000)
@@ -71,7 +92,7 @@ def execute_conversion(
         attempts.append(AttemptResult(converter_name, duration_ms, error))
         logger.info(f"[executor] {converter_name} failed: {error}")
 
-    # Log full internal details for debugging — never expose to user
+    # All converters failed — log internal details for ops, return sanitized for user
     logger.error(
         f"All converters failed for {input_format}→{output_format}:\n"
         + "\n".join(f"  {a.converter_name}: {a.error}" for a in attempts)
