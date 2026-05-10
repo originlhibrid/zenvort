@@ -14,7 +14,7 @@ def merge_pdfs(input_paths: list[str], output_path: str) -> None:
         src = Pdf.open(path)
         dst.pages.extend(src.pages)
         src.close()
-    dst.save(output_path, compress_streams=True, object_stream_mode=pikepdf.Save.OBJECT_STREAM_VERSION_4)
+    dst.save(output_path, compress_streams=True)
 
 
 def split_pdf(input_path: str, output_path: str, pages: str) -> None:
@@ -47,7 +47,7 @@ def _extract_range(pdf: Pdf, output_path: str, start: int, end: int) -> None:
     dst = Pdf.new()
     for idx in range(start - 1, end):
         dst.pages.append(pdf.pages[idx])
-    dst.save(output_path, compress_streams=True, object_stream_mode=pikepdf.Save.OBJECT_STREAM_VERSION_4)
+    dst.save(output_path, compress_streams=True)
 
 
 def _parse_page_ranges(pages: str, total: int) -> list[tuple[int, int]]:
@@ -117,7 +117,7 @@ def watermark_pdf(
     output_path: str,
     text: str,
     opacity: float = 0.3,
-    font_size: int = 48,
+    fontsize: int = 48,
     color: str = "#FF0000",
     angle: int = 45,
 ) -> None:
@@ -128,14 +128,12 @@ def watermark_pdf(
     for page in doc:
         w = page.rect.width
         h = page.rect.height
-
-        text_point = fitz.Point(50, h / 2)
-
-        page.insert_text(
-            text_point,
+        rect = fitz.Rect(w * 0.1, h * 0.3, w * 0.9, h * 0.7)
+        annot = page.add_freetext_annot(
+            rect,
             text,
-            font_size=font_size,
-            color=rgb_color,
+            fontsize=fontsize,
+            text_color=rgb_color,
             opacity=opacity,
             rotate=angle,
         )
@@ -202,16 +200,10 @@ def encrypt_pdf(
 ) -> None:
     pdf = Pdf.open(input_path)
 
-    if pdf.is_encrypted:
-        try:
-            pdf.remove_password(password)
-        except Exception:
-            pass
-
     if owner_password is None:
         owner_password = password
 
-    perm = pikepdf.Permissions.all
+    perm = pikepdf.Permissions()
     if permissions:
         perm = _parse_permissions(permissions)
 
@@ -219,7 +211,6 @@ def encrypt_pdf(
         output_path,
         encryption=pikepdf.Encryption(user=password, owner=owner_password, R=6, allow=perm),
         compress_streams=True,
-        object_stream_mode=pikepdf.Save.OBJECT_STREAM_VERSION_4,
     )
 
 
@@ -234,28 +225,20 @@ def _parse_permissions(perm_str: str) -> pikepdf.Permissions:
         elif p == "edit":
             perms.add(pikepdf.Permissions.modify)
     if not perms:
-        return pikepdf.Permissions.all
+        return pikepdf.Permissions()
     return pikepdf.Permissions(*perms)
 
 
 def decrypt_pdf(input_path: str, output_path: str, password: str) -> None:
-    pdf = Pdf.open(input_path)
+    pdf = Pdf.open(input_path, password=password)
 
     if not pdf.is_encrypted:
         Path(output_path).write_bytes(Path(input_path).read_bytes())
         return
 
-    try:
-        pdf.remove_password(password)
-    except pikepdf.PasswordError:
-        raise ValueError("Incorrect password")
-    except Exception as e:
-        raise RuntimeError(f"Decryption failed: {e}")
-
     pdf.save(
         output_path,
         compress_streams=True,
-        object_stream_mode=pikepdf.Save.OBJECT_STREAM_VERSION_4,
     )
 
 
@@ -352,7 +335,7 @@ def convert_to_pdfa(input_path: str, output_path: str, standard: str = "PDF/A-2b
         response = client.post(
             f"{get_settings().GOTENBERG_URL}/forms/pdfengines/convert",
             files=[("files", ("input.pdf", file_bytes, "application/pdf"))],
-            data={"standard": standard},
+            data={"pdfa": standard},
         )
 
     if response.status_code != 200:

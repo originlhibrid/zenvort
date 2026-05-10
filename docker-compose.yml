@@ -39,7 +39,7 @@ services:
         condition: service_healthy
     volumes:
       - zenvort_data:/data
-      - /tmp/zenvort:/tmp/zenvort
+      - zenvort_tmp:/tmp/zenvort
     env_file: .env
     environment:
       - DB_PATH=/data/zenvort.db
@@ -62,7 +62,7 @@ services:
         condition: service_healthy
     volumes:
       - zenvort_data:/data
-      - /tmp/zenvort:/tmp/zenvort
+      - zenvort_tmp:/tmp/zenvort
     env_file: .env
     environment:
       - DB_PATH=/data/zenvort.db
@@ -76,3 +76,4 @@ services:
 volumes:
   redis_data:
   zenvort_data:
+  zenvort_tmp:
