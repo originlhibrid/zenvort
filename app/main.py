@@ -55,6 +55,53 @@ async def periodic_cleanup_loop():
             logger.exception("Periodic orphan cleanup failed (non-critical)")
 
 
+async def periodic_r2_cleanup_loop():
+    """
+    Background task to clean up old files in R2 storage.
+    
+    Runs daily to clean:
+    - Orphaned input files (uploaded but never processed) older than 24 hours
+    - Output files older than 30 days
+    
+    This handles the case where:
+    - Input files were uploaded but job was never dispatched
+    - Output files that are no longer needed
+    """
+    cleanup_interval = 86400  # 24 hours
+    
+    while True:
+        await asyncio.sleep(cleanup_interval)
+        
+        try:
+            from app.storage_cleanup import cleanup_all
+            
+            logger.info("Starting daily R2 storage cleanup")
+            results = cleanup_all(
+                retention_days=30,  # Keep outputs for 30 days
+                max_age_hours=24,   # Orphaned inputs after 24 hours
+            )
+            
+            total_deleted = (
+                results["orphaned_inputs"]["deleted_count"] +
+                results["old_outputs"]["deleted_count"]
+            )
+            total_size = (
+                results["orphaned_inputs"]["deleted_size_bytes"] +
+                results["old_outputs"]["deleted_size_bytes"]
+            )
+            
+            if total_deleted > 0:
+                logger.info(
+                    f"R2 cleanup: {total_deleted} files, "
+                    f"{total_size / 1024 / 1024:.2f} MB freed"
+                )
+            else:
+                logger.info("R2 cleanup: no files to clean")
+                
+        except Exception:
+            logger.exception("Periodic R2 cleanup failed (non-critical)")
+
+
 def cleanup_orphaned_files() -> int:
     """
     Startup cleanup for orphaned temp files.
@@ -145,14 +192,16 @@ async def lifespan(app: FastAPI):
     
     # Start background tasks
     reset_task = asyncio.create_task(daily_reset_loop())
-    cleanup_task = asyncio.create_task(periodic_cleanup_loop())
+    local_cleanup_task = asyncio.create_task(periodic_cleanup_loop())
+    r2_cleanup_task = asyncio.create_task(periodic_r2_cleanup_loop())
     
     logger.info("Zenvort API started")
     yield
     
     # Cleanup on shutdown
     reset_task.cancel()
-    cleanup_task.cancel()
+    local_cleanup_task.cancel()
+    r2_cleanup_task.cancel()
 
 
 app = FastAPI(title="Zenvort API", version="2.0.0", lifespan=lifespan)

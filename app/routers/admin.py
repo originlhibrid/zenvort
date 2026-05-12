@@ -80,3 +80,67 @@ async def admin_reset_daily(
 ):
     await reset_daily_counts()
     return {"message": "Daily counts reset"}
+
+
+class StorageCleanupBody(BaseModel):
+    retention_days: int = 30
+    max_age_hours: int = 24
+
+
+@router.post("/storage/cleanup")
+async def admin_cleanup_storage(
+    body: StorageCleanupBody | None = None,
+    _: None = Depends(verify_admin_secret),
+):
+    """
+    Clean up old files from R2 storage.
+    
+    Deletes:
+    - Orphaned input files older than max_age_hours (default: 24)
+    - Output files older than retention_days (default: 30)
+    """
+    from app.storage_cleanup import cleanup_all, get_storage_stats
+    
+    retention = body.retention_days if body else 30
+    max_age = body.max_age_hours if body else 24
+    
+    stats_before = get_storage_stats()
+    results = cleanup_all(retention_days=retention, max_age_hours=max_age)
+    stats_after = get_storage_stats()
+    
+    return {
+        "message": "Storage cleanup completed",
+        "results": results,
+        "stats": {
+            "before": stats_before,
+            "after": stats_after,
+            "freed_mb": (stats_before["total"]["size_bytes"] - stats_after["total"]["size_bytes"]) / 1024 / 1024,
+        },
+    }
+
+
+@router.get("/storage/stats")
+async def admin_storage_stats(
+    _: None = Depends(verify_admin_secret),
+):
+    """
+    Get current R2 storage usage statistics.
+    """
+    from app.storage_cleanup import get_storage_stats
+    
+    stats = get_storage_stats()
+    
+    return {
+        "inputs": {
+            "count": stats["inputs"]["count"],
+            "size_mb": stats["inputs"]["size_bytes"] / 1024 / 1024,
+        },
+        "outputs": {
+            "count": stats["outputs"]["count"],
+            "size_mb": stats["outputs"]["size_bytes"] / 1024 / 1024,
+        },
+        "total": {
+            "count": stats["total"]["count"],
+            "size_mb": stats["total"]["size_bytes"] / 1024 / 1024,
+        },
+    }

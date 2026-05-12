@@ -10,7 +10,6 @@ __pycache__
 /tmp
 api/
 worker/
-migrations/
 graphify-out/
 pi/
 node_modules
