@@ -17,6 +17,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY run_migrations.py ./run_migrations.py
+COPY migrations/ ./migrations/
 
 RUN mkdir -p /tmp/zenvort /data
 
