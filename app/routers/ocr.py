@@ -2,10 +2,10 @@ from fastapi import APIRouter, Depends, UploadFile, File, Form
 from typing import Annotated
 
 from app.auth import verify_api_key
-from app.db import create_job, increment_usage
+from app.db import create_job, check_and_increment_usage
 from app.response import abort
 from app.utils.temp import new_job_id, save_upload
-from app.utils.validation import validate_file_size, check_rate_limit
+from app.utils.validation import validate_file_size
 from app.worker import celery_app
 
 
@@ -24,8 +24,7 @@ async def ocr(
     job_id = new_job_id()
     endpoint = "/v1/ocr"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         file_size_bytes = validate_file_size(file)
@@ -46,11 +45,11 @@ async def ocr(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise

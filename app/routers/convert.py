@@ -4,10 +4,10 @@ from typing import Annotated
 
 from app.auth import verify_api_key
 from app.config import get_settings
-from app.db import create_job, increment_usage
+from app.db import create_job, check_and_increment_usage
 from app.response import error_response
 from app.utils.temp import new_job_id, save_upload
-from app.utils.validation import validate_file_size, check_rate_limit
+from app.utils.validation import validate_file_size
 from app.worker import celery_app
 
 
@@ -35,7 +35,7 @@ async def convert(
     endpoint = "/v1/convert"
     file_size_bytes = 0
 
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         input_format = Path(file.filename or "file").suffix.lstrip(".").lower()
@@ -64,11 +64,11 @@ async def convert(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise

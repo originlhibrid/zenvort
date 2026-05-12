@@ -47,3 +47,37 @@ async def check_rate_limit(key: dict) -> None:
                 "resets_at": next_midnight.isoformat(),
             },
         )
+
+
+def validate_webhook_url(url: str) -> bool:
+    """
+    Returns True if the URL is safe to POST to.
+    Blocks: non http/https schemes, private IPs, loopback, link-local.
+    """
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        hostname = parsed.hostname
+        if not hostname:
+            return False
+        ip = socket.gethostbyname(hostname)
+        addr = ipaddress.ip_address(ip)
+        blocked = [
+            ipaddress.ip_network("127.0.0.0/8"),
+            ipaddress.ip_network("10.0.0.0/8"),
+            ipaddress.ip_network("172.16.0.0/12"),
+            ipaddress.ip_network("192.168.0.0/16"),
+            ipaddress.ip_network("169.254.0.0/16"),
+            ipaddress.ip_network("::1/128"),
+        ]
+        for network in blocked:
+            if addr in network:
+                return False
+        return True
+    except Exception:
+        return False

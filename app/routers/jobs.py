@@ -3,10 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from app.auth import verify_api_key
-from app.db import get_job, increment_usage
+from app.db import get_job, check_and_increment_usage
 from app.storage import download_file
 from app.config import get_settings
-from app.utils.validation import check_rate_limit
 from app.response import abort
 
 
@@ -20,9 +19,10 @@ async def get_job_status(
     download: bool = Query(False, description="Stream file as attachment"),
     key: dict = Depends(verify_api_key),
 ):
+    tier = key.get("tier", "free")
     endpoint = f"/v1/jobs/{job_id}"
 
-    await check_rate_limit(key)
+    await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, 0, 200)
 
     try:
         job = await get_job(job_id)
@@ -45,7 +45,6 @@ async def get_job_status(
                 tmp_dir.mkdir(parents=True, exist_ok=True)
                 local_path = tmp_dir / f"{job_id}_{job['filename']}"
                 download_file(f"outputs/{job_id}/{job['filename']}", str(local_path))
-                await increment_usage(key["key_id"], endpoint, job_id, 0, 200)
                 return FileResponse(
                     path=str(local_path),
                     filename=job["filename"],
@@ -55,11 +54,8 @@ async def get_job_status(
         elif job["status"] == "failed":
             response["error"] = job["error"]
 
-        await increment_usage(key["key_id"], endpoint, job_id, 0, 200)
         return response
-    except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, 0, e.status_code)
+    except HTTPException:
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, 0, 500)
         raise

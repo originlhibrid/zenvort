@@ -1,3 +1,4 @@
+import hmac
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
@@ -16,7 +17,10 @@ router = APIRouter(prefix="/v1/admin", tags=["admin"])
 
 
 async def verify_admin_secret(x_admin_secret: str = Query(..., alias="admin_secret")) -> None:
-    if x_admin_secret != settings.ADMIN_SECRET or not settings.ADMIN_SECRET:
+    if not settings.ADMIN_SECRET or not hmac.compare_digest(
+        x_admin_secret.encode(),
+        settings.ADMIN_SECRET.encode(),
+    ):
         raise HTTPException(
             status_code=403,
             detail={"error": "Forbidden", "code": "FORBIDDEN"},

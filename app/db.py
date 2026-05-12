@@ -128,21 +128,70 @@ async def get_key_by_id(key_id: str) -> dict | None:
             return dict(row) if row else None
 
 
-async def increment_usage(
-    key_id: str, endpoint: str, job_id: str,
-    file_size: int, status_code: int,
+async def check_and_increment_usage(
+    key_id: str,
+    tier: str,
+    endpoint: str,
+    job_id: str,
+    file_size: int,
+    status_code: int,
 ) -> None:
+    """
+    Atomically checks the daily rate limit AND increments usage counters in one UPDATE.
+    Raises HTTPException(429) immediately if the limit has already been reached.
+    No race window: the check and increment happen in a single SQL statement.
+    """
+    import hashlib
+    from datetime import datetime, timezone
+
+    limits = {"free": 50, "pro": 500, "enterprise": 10000}
+    limit = limits.get(tier, 50)
     now = datetime.now(timezone.utc).isoformat()
     db_path = get_settings().DB_PATH
+
     async with aiosqlite.connect(db_path) as db:
-        await db.execute(
-            """UPDATE api_keys
-               SET requests_today = requests_today + 1,
-                   requests_total = requests_total + 1,
-                   last_used_at = ?
-               WHERE key_id = ?""",
-            (now, key_id),
+        await db.execute("PRAGMA journal_mode=WAL")
+        # Atomic: UPDATE ... WHERE requests_today < :limit
+        # rowcount == 1 means the row matched AND was updated → under limit, allowed
+        # rowcount == 0 means no row matched the WHERE clause → over limit, denied
+        cursor = await db.execute(
+            """
+            UPDATE api_keys
+            SET requests_today = requests_today + 1,
+                requests_total = requests_total + 1,
+                last_used_at = ?
+            WHERE key_id = ?
+              AND is_active = 1
+              AND requests_today < ?
+            """,
+            (now, key_id, limit),
         )
+        await db.commit()
+
+        if cursor.rowcount == 0:
+            # Rate limit already reached — fetch current count for resets_at
+            async with aiosqlite.connect(db_path) as db2:
+                db2.row_factory = aiosqlite.Row
+                async with db2.execute(
+                    "SELECT requests_today FROM api_keys WHERE key_id = ?", (key_id,)
+                ) as cur:
+                    row = await cur.fetchone()
+            from datetime import datetime as dt, timedelta, timezone as tz
+            next_midnight = (dt.now(tz.utc) + timedelta(days=1)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+            raise HTTPException(
+                status_code=429,
+                detail={
+                    "error": "Daily rate limit exceeded",
+                    "code": "RATE_LIMIT_EXCEEDED",
+                    "tier": tier,
+                    "limit": limit,
+                    "resets_at": next_midnight.isoformat(),
+                },
+            )
+
+        # Under limit — also log the call
         await db.execute(
             """INSERT INTO usage_log (key_id, endpoint, job_id, file_size_bytes, status_code, created_at)
                VALUES (?, ?, ?, ?, ?, ?)""",

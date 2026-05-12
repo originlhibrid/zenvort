@@ -5,11 +5,12 @@ from typing import Annotated
 
 from app.auth import verify_api_key
 from app.config import get_settings
-from app.db import create_job, increment_usage
+from app.db import create_job, check_and_increment_usage, update_job
 from app.response import abort
 from app.utils.temp import new_job_id, save_upload
-from app.utils.validation import validate_file_size, check_rate_limit
+from app.utils.validation import validate_file_size
 from app.worker import celery_app
+from app.handlers.pdf_ops import read_metadata, get_bookmarks
 
 
 router = APIRouter(prefix="/v1/pdf", tags=["pdf"])
@@ -33,8 +34,7 @@ async def pdf_merge(
     job_id = new_job_id()
     endpoint = "/v1/pdf/merge"
     total_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         if len(files) < 2:
@@ -62,13 +62,13 @@ async def pdf_merge(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, total_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, total_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, total_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, total_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, total_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, total_bytes, 500)
         raise
 
 
@@ -82,8 +82,7 @@ async def pdf_split(
     job_id = new_job_id()
     endpoint = "/v1/pdf/split"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -100,13 +99,13 @@ async def pdf_split(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -121,8 +120,7 @@ async def pdf_rotate(
     job_id = new_job_id()
     endpoint = "/v1/pdf/rotate"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -143,13 +141,13 @@ async def pdf_rotate(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -167,8 +165,7 @@ async def pdf_watermark(
     job_id = new_job_id()
     endpoint = "/v1/pdf/watermark"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -192,13 +189,13 @@ async def pdf_watermark(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -214,8 +211,7 @@ async def pdf_stamp(
     job_id = new_job_id()
     endpoint = "/v1/pdf/stamp"
     total_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, s1 = _validate_pdf(file)
@@ -248,13 +244,13 @@ async def pdf_stamp(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, total_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, total_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, total_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, total_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, total_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, total_bytes, 500)
         raise
 
 
@@ -270,8 +266,7 @@ async def pdf_encrypt(
     job_id = new_job_id()
     endpoint = "/v1/pdf/encrypt"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -293,13 +288,13 @@ async def pdf_encrypt(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -313,8 +308,7 @@ async def pdf_decrypt(
     job_id = new_job_id()
     endpoint = "/v1/pdf/decrypt"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -331,13 +325,13 @@ async def pdf_decrypt(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -351,8 +345,7 @@ async def pdf_compress(
     job_id = new_job_id()
     endpoint = "/v1/pdf/compress"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -372,13 +365,13 @@ async def pdf_compress(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -396,8 +389,7 @@ async def pdf_metadata(
     job_id = new_job_id()
     endpoint = "/v1/pdf/metadata"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -426,21 +418,19 @@ async def pdf_metadata(
                     "_webhook_url": webhook_url,
                 }],
             )
-            await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+            await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
             return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
         else:
-            from app.handlers.pdf_ops import read_metadata
             result = read_metadata(str(input_path))
             await create_job(job_id, endpoint=endpoint, webhook_url=webhook_url)
-            from app.db import update_job
             await update_job(job_id, "done", result_url=None, filename="input.pdf")
-            await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+            await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
             return {"job_id": job_id, "status": "done", "metadata": result, "filename": "input.pdf"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -454,8 +444,7 @@ async def pdf_bookmarks(
     job_id = new_job_id()
     endpoint = "/v1/pdf/bookmarks"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -475,22 +464,21 @@ async def pdf_bookmarks(
                     "_webhook_url": webhook_url,
                 }],
             )
-            await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+            await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
             return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
         else:
-            from app.handlers.pdf_ops import get_bookmarks
             result = get_bookmarks(str(input_path))
             await create_job(job_id, endpoint=endpoint, webhook_url=webhook_url)
-            await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+            await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
             return {"job_id": job_id, "status": "done", "bookmarks": result, "filename": "input.pdf"}
     except json.JSONDecodeError:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 400)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 400)
         abort(400, "Invalid JSON for bookmarks", "INVALID_INPUT", job_id)
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -503,8 +491,7 @@ async def pdf_flatten(
     job_id = new_job_id()
     endpoint = "/v1/pdf/flatten"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -520,13 +507,13 @@ async def pdf_flatten(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise
 
 
@@ -540,8 +527,7 @@ async def pdf_pdfa(
     job_id = new_job_id()
     endpoint = "/v1/pdf/pdfa"
     file_size_bytes = 0
-
-    await check_rate_limit(key)
+    tier = key.get("tier", "free")
 
     try:
         _, file_size_bytes = _validate_pdf(file)
@@ -562,11 +548,11 @@ async def pdf_pdfa(
             }],
         )
 
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 200)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 200)
         return {"job_id": job_id, "status": "queued", "poll_url": f"/v1/jobs/{job_id}"}
     except HTTPException as e:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, e.status_code)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, e.status_code)
         raise
     except Exception:
-        await increment_usage(key["key_id"], endpoint, job_id, file_size_bytes, 500)
+        await check_and_increment_usage(key["key_id"], tier, endpoint, job_id, file_size_bytes, 500)
         raise

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.worker import celery_app
 from app.storage import upload_file, generate_download_url, get_s3_client
+from app.utils.validation import validate_webhook_url
 from app.config import get_settings
 
 settings = get_settings()
@@ -45,6 +46,12 @@ def _fire_webhook(job_id: str, status: str, result_url: str | None, filename: st
         return
     webhook_url = row.get("webhook_url")
     if not webhook_url:
+        return
+    if not validate_webhook_url(webhook_url):
+        import logging
+        logging.getLogger(__name__).warning(
+            "Blocked webhook to unsafe URL: %s", webhook_url
+        )
         return
     try:
         import httpx
