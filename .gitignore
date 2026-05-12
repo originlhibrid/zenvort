@@ -39,6 +39,17 @@ temp_*.ts
 *.swp
 *.swo
 
+# Documentation (internal)
+WORKFLOW.md
+INTERNAL.md
+
+# Load testing
+load_test.py
+LOAD_TEST_MONITORING.md
+load-test-*.json
+load-test-results.json
+load-test-metrics/
+
 # Editors
 .vscode/
 .idea/

@@ -69,14 +69,34 @@ def _fire_webhook(job_id: str, status: str, result_url: str | None, filename: st
 
 def _cleanup(job_id: str) -> None:
     tmp = Path(settings.TEMP_DIR)
-    for f in glob.glob(f"{tmp}/{job_id}-*"):
+    
+    # Clean up all files and directories related to this job
+    patterns = [
+        f"{tmp}/{job_id}",           # job directory (input saved here)
+        f"{tmp}/{job_id}/",          # job directory with trailing slash
+        f"{tmp}/{job_id}-*",         # loose files (output saved here)
+    ]
+    
+    for pattern in patterns:
+        for path in glob.glob(pattern):
+            try:
+                if Path(path).is_dir():
+                    shutil.rmtree(path, ignore_errors=True)
+                else:
+                    os.unlink(path)
+            except OSError:
+                pass
+    
+    # Also clean any files with this job_id prefix anywhere in temp
+    # (safety net for edge cases)
+    for path in tmp.glob(f"*{job_id}*"):
         try:
-            os.unlink(f)
+            if path.is_dir():
+                shutil.rmtree(path, ignore_errors=True)
+            else:
+                path.unlink()
         except OSError:
             pass
-    job_dir = tmp / job_id
-    if job_dir.exists():
-        shutil.rmtree(job_dir, ignore_errors=True)
 
 
 def _upload_output(local_path: str, job_id: str, filename: str) -> str:

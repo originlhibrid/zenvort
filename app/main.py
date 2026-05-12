@@ -1,8 +1,9 @@
 import os
 import asyncio
+import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-import logging
+from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,17 +32,127 @@ async def daily_reset_loop():
             logger.exception("Failed to reset daily counts")
 
 
+async def periodic_cleanup_loop():
+    """
+    Background task to periodically clean up orphaned files.
+    
+    Runs every 30 minutes to catch:
+    - Files from crashed API instances (that missed startup cleanup)
+    - Files from workers that crashed before cleanup
+    - Any race conditions in the cleanup logic
+    """
+    cleanup_interval = 1800  # 30 minutes
+    
+    while True:
+        await asyncio.sleep(cleanup_interval)
+        
+        try:
+            loop = asyncio.get_running_loop()
+            cleaned = await loop.run_in_executor(None, cleanup_orphaned_files)
+            if cleaned > 0:
+                logger.info(f"Periodic cleanup removed {cleaned} orphaned files")
+        except Exception:
+            logger.exception("Periodic orphan cleanup failed (non-critical)")
+
+
+def cleanup_orphaned_files() -> int:
+    """
+    Startup cleanup for orphaned temp files.
+    
+    Handles the edge case where:
+    - API server crashes after saving input to /tmp/zenvort/{job_id}/
+    - But before dispatching the Celery task
+    - Result: orphaned files that workers will never claim
+    
+    Deletes anything older than 1 hour.
+    Never raises - failures are logged but don't stop startup.
+    
+    Returns:
+        Number of items cleaned up
+    """
+    import shutil
+    
+    temp_dir = Path(settings.TEMP_DIR)
+    if not temp_dir.exists():
+        logger.debug("Temp dir does not exist, skipping cleanup")
+        return 0
+    
+    # Age threshold: files older than this are considered orphaned
+    max_age = timedelta(hours=1)
+    cutoff = datetime.now() - max_age
+    
+    cleaned = 0
+    failed = 0
+    
+    try:
+        for item in temp_dir.iterdir():
+            try:
+                # Re-check existence (handles race with concurrent cleanup)
+                if not item.exists():
+                    continue
+                    
+                # Get modification time
+                mtime = datetime.fromtimestamp(item.stat().st_mtime)
+                
+                if mtime < cutoff:
+                    if item.is_dir():
+                        shutil.rmtree(item, ignore_errors=True)
+                        logger.info(f"Cleaned orphaned directory: {item.name}")
+                    else:
+                        item.unlink(missing_ok=True)  # Handle race condition
+                        logger.info(f"Cleaned orphaned file: {item.name}")
+                    cleaned += 1
+                else:
+                    logger.debug(f"Skipping recent item (age OK): {item.name}")
+                    
+            except FileNotFoundError:
+                # Item was deleted by another process - not an error
+                continue
+            except Exception as e:
+                logger.warning(f"Failed to cleanup {item}: {e}")
+                failed += 1
+                
+    except Exception as e:
+        # Directory scan failed - not critical, just log it
+        logger.error(f"Orphaned file scan failed: {e}")
+        return 0
+    
+    if cleaned > 0:
+        logger.info(f"Orphaned file cleanup complete: {cleaned} items removed, {failed} failures")
+    
+    return cleaned
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if not settings.ADMIN_SECRET:
         import warnings
         warnings.warn("ADMIN_SECRET is not set. All admin endpoints are disabled.", stacklevel=2)
+    
     os.makedirs(settings.TEMP_DIR, exist_ok=True)
+    
+    # Clean up any orphaned files from crashed/restarted instances
+    # Run in executor to avoid blocking startup if directory is large
+    loop = asyncio.get_running_loop()
+    try:
+        cleaned = await loop.run_in_executor(None, cleanup_orphaned_files)
+        if cleaned:
+            logger.info(f"Startup cleanup removed {cleaned} orphaned files")
+    except Exception:
+        logger.exception("Startup orphan cleanup failed (non-critical)")
+    
     await init_db()
+    
+    # Start background tasks
     reset_task = asyncio.create_task(daily_reset_loop())
+    cleanup_task = asyncio.create_task(periodic_cleanup_loop())
+    
     logger.info("Zenvort API started")
     yield
+    
+    # Cleanup on shutdown
     reset_task.cancel()
+    cleanup_task.cancel()
 
 
 app = FastAPI(title="Zenvort API", version="2.0.0", lifespan=lifespan)
