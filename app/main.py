@@ -81,22 +81,21 @@ async def periodic_r2_cleanup_loop():
                 max_age_hours=24,   # Orphaned inputs after 24 hours
             )
             
-            total_deleted = (
-                results["orphaned_inputs"]["deleted_count"] +
-                results["old_outputs"]["deleted_count"]
-            )
-            total_size = (
-                results["orphaned_inputs"]["deleted_size_bytes"] +
-                results["old_outputs"]["deleted_size_bytes"]
-            )
+            # Detailed logging for monitoring
+            inputs_deleted = results["orphaned_inputs"]["deleted_count"]
+            inputs_size = results["orphaned_inputs"]["deleted_size_bytes"]
+            outputs_deleted = results["old_outputs"]["deleted_count"]
+            outputs_size = results["old_outputs"]["deleted_size_bytes"]
             
-            if total_deleted > 0:
+            if inputs_deleted > 0 or outputs_deleted > 0:
                 logger.info(
-                    f"R2 cleanup: {total_deleted} files, "
-                    f"{total_size / 1024 / 1024:.2f} MB freed"
+                    f"R2 cleanup: {inputs_deleted} orphaned inputs "
+                    f"({inputs_size / 1024 / 1024:.2f} MB), "
+                    f"{outputs_deleted} old outputs "
+                    f"({outputs_size / 1024 / 1024:.2f} MB) removed"
                 )
             else:
-                logger.info("R2 cleanup: no files to clean")
+                logger.info("R2 cleanup: nothing to clean")
                 
         except Exception:
             logger.exception("Periodic R2 cleanup failed (non-critical)")
