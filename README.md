@@ -1,292 +1,290 @@
-# Zenvort
+# ⚡ Zenvort
 
-A file conversion API built with FastAPI and Celery. Accept file uploads, convert using FFmpeg, Gotenberg, Pillow, PyMuPDF, Tesseract and more, store results on Cloudflare R2, and return a download URL. Jobs are processed asynchronously via **Celery + Redis**.
+**A blazing-fast file conversion API powered by FastAPI & Celery**
 
----
-
-## Architecture
-
-```
-                     ┌──────────────┐
-                     │   Client     │
-                     │  CLI / SDK   │
-                     └──────┬───────┘
-                            │ HTTPS
-                            ▼
-┌───────────────────────────────────────────────────────┐
-│              api (FastAPI, :8000)                    │
-│                                                       │
-│  /v1/convert  /v1/pdf/*  /v1/ocr  /v1/image/*        │
-│  /v1/media/*  /v1/jobs  /v1/admin/*                  │
-│                                                       │
-│  SQLite (aiosqlite) → /data/zenvort.db                │
-│  Celery dispatch → Redis                              │
-└─────────────────────────────┬─────────────────────────┘
-                              │
-         ┌────────────────────┴──────────────────┐
-         ▼                                        ▼
-┌─────────────────────┐               ┌─────────────────────────┐
-│   worker (Celery)   │               │    Cloudflare R2        │
-│  - FFmpeg           │               │    outputs/{jobId}/     │
-│  - Gotenberg        │               │    Presigned URLs       │
-│  - Pillow           │               └─────────────────────────┘
-│  - PyMuPDF          │
-│  - Tesseract        │               ┌─────────────────────────┐
-│  - Pandoc           │               │  redis (:6379)          │
-└─────────────────────┘               │  Celery broker/backend   │
-                                     └─────────────────────────┘
-```
-
-**Services:**
-- `api` — FastAPI REST API (port 8000)
-- `worker` — Celery async job processor
-- `redis` — Redis 7 (Celery broker)
-- `gotenberg` — Gotenberg/LibreOffice (document conversion)
+Convert documents, images, audio, video, and PDFs with a single REST call. Built for scalability with async processing, Cloudflare R2 storage, and intelligent rate limiting.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
-# Clone
 git clone https://github.com/originlhibrid/zenvort.git
 cd zenvort
 
-# Configure
+# Configure environment
 cp .env.example .env
 # Edit .env with your R2 credentials and ADMIN_SECRET
 
-# Start
-docker-compose up -d
+# Start services
+docker compose up -d
 
-# Check health
+# Health check
 curl http://localhost:8000/v1/health
-
-# Create API key
-curl -X POST http://localhost:8000/v1/admin/keys \
-  -H "admin_secret: YOUR_ADMIN_SECRET" \
-  -H "Content-Type: application/json" \
-  -d '{"name": "test-key", "tier": "free"}'
 ```
 
 ---
 
-## API Endpoints
+## 📐 Architecture
 
-### Public
+```
+                           ┌─────────────┐
+                           │   Client    │
+                           │  CLI / SDK  │
+                           └──────┬──────┘
+                                  │ HTTPS
+                                  ▼
+              ┌───────────────────────────────────────┐
+              │            api (FastAPI)              │
+              │                                        │
+              │  /v1/convert  /v1/pdf/*  /v1/ocr      │
+              │  /v1/image/*  /v1/media/*            │
+              │                                        │
+              │  SQLite + Redis                       │
+              └──────────────┬────────────────────────┘
+                             │
+        ┌────────────────────┼────────────────────┐
+        │                    │                    │
+        ▼                    ▼                    ▼
+   ┌──────────┐       ┌──────────┐       ┌──────────────┐
+   │  Worker  │       │   R2     │       │    Redis     │
+   │ (Celery) │       │ Storage  │       │   Broker     │
+   └──────────┘       └──────────┘       └──────────────┘
+```
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| `api` | 8000 | FastAPI REST API |
+| `worker` | — | Celery async processor |
+| `redis` | 6379 | Message broker & backend |
+| `gotenberg` | 3000 | LibreOffice document conversion |
+
+---
+
+## 📡 Endpoints
+
+### 🔓 Public
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/v1/health` | Health check (no auth) |
 
-### File Conversion (requires `X-API-Key`)
+---
+
+### 📄 Conversion (Requires `X-API-Key`)
+
+#### General Conversion
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/v1/convert` | Convert between formats |
+| `POST` | `/v1/convert` | Convert between any supported format |
+
+#### PDF Operations
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | `POST` | `/v1/pdf/merge` | Merge multiple PDFs |
-| `POST` | `/v1/pdf/split` | Split PDF by page ranges |
-| `POST` | `/v1/pdf/rotate` | Rotate PDF pages |
+| `POST` | `/v1/pdf/split` | Split by page ranges |
+| `POST` | `/v1/pdf/rotate` | Rotate pages |
 | `POST` | `/v1/pdf/watermark` | Add text watermark |
 | `POST` | `/v1/pdf/stamp` | Add image stamp |
-| `POST` | `/v1/pdf/encrypt` | Encrypt with password |
-| `POST` | `/v1/pdf/decrypt` | Decrypt with password |
-| `POST` | `/v1/pdf/compress` | Compress PDF |
+| `POST` | `/v1/pdf/encrypt` | Password protect |
+| `POST` | `/v1/pdf/decrypt` | Remove encryption |
+| `POST` | `/v1/pdf/compress` | Reduce file size |
 | `POST` | `/v1/pdf/metadata` | Read/write metadata |
-| `POST` | `/v1/pdf/bookmarks` | Read/write bookmarks |
+| `POST` | `/v1/pdf/bookmarks` | Manage bookmarks |
 | `POST` | `/v1/pdf/flatten` | Flatten form fields |
 | `POST` | `/v1/pdf/pdfa` | Convert to PDF/A |
+
+#### Media & OCR
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | `POST` | `/v1/ocr` | OCR on images/PDFs |
 | `POST` | `/v1/image/convert` | Convert image format |
 | `POST` | `/v1/image/resize` | Resize image |
 | `POST` | `/v1/media/convert` | Convert audio/video |
+
+#### Jobs
+| Method | Endpoint | Description |
+|--------|----------|-------------|
 | `GET` | `/v1/jobs/{job_id}` | Get job status |
 | `GET` | `/v1/jobs/{job_id}?download=true` | Download result |
 
-### Admin (requires `admin_secret`)
+---
+
+### 🔐 Admin (Requires `admin_secret`)
+
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/v1/admin/keys` | Create new API key |
+| `POST` | `/v1/admin/keys` | Create API key |
 | `GET` | `/v1/admin/keys` | List all keys |
 | `DELETE` | `/v1/admin/keys/{key_id}` | Deactivate key |
-| `GET` | `/v1/admin/usage/{key_id}` | Usage logs |
+| `GET` | `/v1/admin/usage/{key_id}` | View usage logs |
 | `POST` | `/v1/admin/reset-daily` | Reset daily counters |
 
 ---
 
-## Rate Limits
+## 📦 Supported Formats
 
-| Tier | Daily Limit |
-|------|-------------|
-| free | 50 requests |
-| pro | 500 requests |
-| enterprise | 10,000 requests |
-
----
-
-## Supported Formats
-
-**Documents:** docx, pptx, odt, xlsx, ods, odp, md, html, rtf, txt, pdf
-
-**Images:** jpg, jpeg, png, webp, avif, bmp, tiff, gif, svg
-
-**Audio:** mp3, wav, ogg, flac
-
-**Video:** mp4, avi, mov, webm
+| Category | Formats |
+|----------|---------|
+| **Documents** | docx, pptx, odt, xlsx, ods, odp, md, html, rtf, txt, pdf |
+| **Images** | jpg, jpeg, png, webp, avif, bmp, tiff, gif, svg |
+| **Audio** | mp3, wav, ogg, flac |
+| **Video** | mp4, avi, mov, webm |
 
 ---
 
-## Environment Variables
+## 💡 Usage Examples
 
-| Variable | Required | Default | Purpose |
-|----------|----------|---------|---------|
-| `ADMIN_SECRET` | Yes | — | Admin authentication |
-| `DB_PATH` | No | `/data/zenvort.db` | SQLite database path |
-| `TEMP_DIR` | No | `/tmp/zenvort` | Temp file directory |
-| `REDIS_URL` | No | `redis://redis:6379/0` | Redis connection |
-| `GOTENBERG_URL` | No | `http://gotenberg:3000` | Gotenberg service |
-| `R2_ACCOUNT_ID` | Yes | — | Cloudflare R2 account |
-| `R2_ACCESS_KEY_ID` | Yes | — | R2 access key |
-| `R2_SECRET_ACCESS_KEY` | Yes | — | R2 secret key |
-| `R2_BUCKET_NAME` | No | `zenvort` | R2 bucket name |
-| `R2_ENDPOINT_URL` | No | `https://{account_id}.r2.cloudflarestorage.com` | R2 endpoint |
-| `MAX_FILE_SIZE_MB` | No | `100` | Max upload size |
-| `PRESIGNED_EXPIRY_SECONDS` | No | `3600` | Download URL expiry |
-
----
-
-## Example Usage
-
+### Create API Key
 ```bash
-# Create API key
-ADMIN_SECRET="your-secure-secret"
-curl -X POST http://localhost:8000/v1/admin/keys \
-  -H "admin_secret: $ADMIN_SECRET" \
+curl -X POST "http://localhost:8000/v1/admin/keys?admin_secret=YOUR_ADMIN_SECRET" \
   -H "Content-Type: application/json" \
-  -d '{"name": "dev-key", "tier": "free"}'
+  -d '{"name": "my-app", "tier": "free"}'
+```
 
-# Convert PDF to DOCX
+### Convert Document to PDF
+```bash
 curl -X POST http://localhost:8000/v1/convert \
   -H "X-API-Key: YOUR_API_KEY" \
-  -F "file=@document.pdf" \
-  -F "to=docx"
+  -F "file=@document.docx" \
+  -F "to=pdf"
+```
 
-# Check job status
-curl http://localhost:8000/v1/jobs/JOB_ID \
-  -H "X-API-Key: YOUR_API_KEY"
-
-# Download result
-curl "http://localhost:8000/v1/jobs/JOB_ID?download=true" \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -o output.docx
-
-# OCR an image
+### OCR an Image
+```bash
 curl -X POST http://localhost:8000/v1/ocr \
   -H "X-API-Key: YOUR_API_KEY" \
   -F "file=@scan.jpg" \
   -F "language=eng"
+```
 
-# Merge PDFs
+### Merge PDFs
+```bash
 curl -X POST http://localhost:8000/v1/pdf/merge \
   -H "X-API-Key: YOUR_API_KEY" \
   -F "files=@page1.pdf" \
   -F "files=@page2.pdf"
+```
 
-# Compress PDF
-curl -X POST http://localhost:8000/v1/pdf/compress \
-  -H "X-API-Key: YOUR_API_KEY" \
-  -F "file=@large.pdf" \
-  -F "quality=high"
+### Check Job Status
+```bash
+curl http://localhost:8000/v1/jobs/JOB_ID \
+  -H "X-API-Key: YOUR_API_KEY"
 ```
 
 ---
 
-## Tech Stack
+## ⚙️ Environment Variables
 
-| Component | Technology |
-|-----------|------------|
-| API | FastAPI + Uvicorn |
-| Task Queue | Celery + Redis |
-| Database | SQLite (aiosqlite) |
-| Document Conversion | Gotenberg (LibreOffice), Pandoc |
-| PDF Processing | PyMuPDF, pikepdf, pdf2docx |
-| Image Processing | Pillow, CairoSVG, img2pdf |
-| Media Processing | FFmpeg |
-| OCR | Tesseract + pytesseract |
-| Storage | Cloudflare R2 (S3-compatible) |
-| Rate Limiting | slowapi |
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `ADMIN_SECRET` | ✅ | — | Admin authentication |
+| `R2_ACCOUNT_ID` | ✅ | — | Cloudflare R2 account ID |
+| `R2_ACCESS_KEY_ID` | ✅ | — | R2 access key |
+| `R2_SECRET_ACCESS_KEY` | ✅ | — | R2 secret key |
+| `DB_PATH` | | `/data/zenvort.db` | SQLite database path |
+| `TEMP_DIR` | | `/tmp/zenvort` | Temp file directory |
+| `REDIS_URL` | | `redis://redis:6379/0` | Redis connection |
+| `GOTENBERG_URL` | | `http://gotenberg:3000` | Gotenberg URL |
+| `MAX_FILE_SIZE_MB` | | `100` | Max upload size (MB) |
+| `PRESIGNED_EXPIRY_SECONDS` | | `3600` | Download URL expiry |
 
 ---
 
-## File Structure
+## 📊 Rate Limits
+
+| Tier | Daily Requests | Use Case |
+|------|----------------|----------|
+| 🆓 free | 50 | Development, testing |
+| 💎 pro | 500 | Small projects |
+| 🏢 enterprise | 10,000 | Production workloads |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| **API** | FastAPI + Uvicorn |
+| **Task Queue** | Celery + Redis |
+| **Database** | SQLite (aiosqlite) |
+| **Document Conversion** | Gotenberg, Pandoc |
+| **PDF Processing** | PyMuPDF, pikepdf, pdf2docx |
+| **Image Processing** | Pillow, CairoSVG, img2pdf |
+| **Media Processing** | FFmpeg |
+| **OCR** | Tesseract |
+| **Storage** | Cloudflare R2 |
+| **Rate Limiting** | slowapi |
+
+---
+
+## 🧪 Development
+
+```bash
+# Local setup
+python -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Run API
+uvicorn app.main:app --reload --port 8000
+
+# Run worker (separate terminal)
+celery -A app.worker.celery_app worker --loglevel=info --concurrency=2
+```
+
+---
+
+## 📁 Project Structure
 
 ```
 zenvort/
 ├── app/
-│   ├── main.py              # FastAPI app, lifespan, health
+│   ├── main.py              # FastAPI app & health endpoints
 │   ├── config.py            # Pydantic settings
-│   ├── db.py                # SQLite operations (aiosqlite)
+│   ├── db.py                # SQLite operations
 │   ├── auth.py              # API key verification
-│   ├── storage.py           # R2 upload/download
-│   ├── response.py          # Error response helpers
+│   ├── storage.py           # R2 S3 client
 │   ├── worker.py            # Celery app definition
-│   ├── tasks.py             # 5 Celery tasks
+│   ├── tasks.py             # 5 async task handlers
 │   ├── routers/
-│   │   ├── admin.py         # Admin endpoints
+│   │   ├── admin.py         # Key & usage management
 │   │   ├── convert.py       # Generic conversion
-│   │   ├── pdf.py           # PDF operations (12 endpoints)
-│   │   ├── ocr.py           # OCR endpoint
+│   │   ├── pdf.py           # 12 PDF endpoints
+│   │   ├── ocr.py           # OCR processing
 │   │   ├── image.py         # Image operations
-│   │   ├── media.py         # Media conversion
-│   │   └── jobs.py          # Job status
-│   ├── handlers/
-│   │   ├── documents.py     # Gotenberg conversion
+│   │   ├── media.py         # Audio/video
+│   │   └── jobs.py          # Status & download
+│   ├── handlers/            # Processing engines
+│   │   ├── documents.py     # Gotenberg + Pandoc
 │   │   ├── pdf_ops.py       # PyMuPDF operations
-│   │   ├── images.py        # Pillow/CairoSVG
-│   │   ├── media.py         # FFmpeg
-│   │   └── ocr.py           # Tesseract
+│   │   ├── images.py        # Pillow + CairoSVG
+│   │   ├── media.py         # FFmpeg wrapper
+│   │   └── ocr.py           # Tesseract wrapper
 │   └── utils/
-│       ├── temp.py          # Temp file management
-│       ├── validation.py    # Rate limiting, file size
-│       └── formats.py        # Format constants
-├── Dockerfile              # Multi-stage for api + worker
-├── docker-compose.yml       # 4 services
-├── Makefile                 # Common commands
+│       ├── temp.py          # Job temp directories
+│       ├── validation.py    # Rate limits & size
+│       └── formats.py       # Format constants
+├── Dockerfile              # Multi-stage build
+├── docker-compose.yml      # 4-service orchestration
+├── Makefile                # Dev commands
 ├── requirements.txt
-├── .env.example
-└── README.md
+└── .env.example
 ```
 
 ---
 
-## Security
+## 🔒 Security
 
 | Feature | Implementation |
 |---------|---------------|
-| **API Key Auth** | SHA256 hash stored in DB, raw key returned only on creation |
-| **Admin Auth** | `admin_secret` query param (or `X-Admin-Secret` header) |
-| **Rate Limiting** | Daily limits per tier (50/500/10000) |
-| **File Size** | Configurable max, enforced before processing |
-| **Active Key Check** | Revoked keys rejected immediately |
+| API Key Auth | SHA256 hashed, returned only on creation |
+| Admin Auth | Secret-based with header/param support |
+| Rate Limiting | Per-key daily counters by tier |
+| File Size Limits | Configurable max, enforced pre-processing |
+| Key Revocation | Immediate rejection of revoked keys |
 
 ---
 
-## Development
+## 📜 License
 
-```bash
-# Local development
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --reload
-
-# Run worker
-celery -A app.worker.celery_app worker --loglevel=info
-
-# Run with Docker
-docker-compose up --build
-```
-
----
-
-## License
-
-MIT
+MIT License — free for personal and commercial use.
